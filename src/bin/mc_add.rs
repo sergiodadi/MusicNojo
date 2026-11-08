@@ -411,6 +411,23 @@ enum Command {
         #[arg(long)]
         plan: PathBuf,
     },
+    /// Copies a local image into the package's Images/ folder (named like
+    /// the app's own covers: "<id>_f_<slug>.<ext>" / "<id>_b_<slug>.<ext>")
+    /// and points the album at it. Writes immediately — unlike the plan/
+    /// commit split above, this has no row-allocation ambiguity to review
+    /// first, just a file copy plus one column each.
+    SetCover {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        id: i64,
+        /// Local image file to use as the front cover
+        #[arg(long)]
+        front: Option<PathBuf>,
+        /// Local image file to use as the back cover
+        #[arg(long)]
+        back: Option<PathBuf>,
+    },
 }
 
 /// Refuses to operate on what looks like a real, live Music Collector
@@ -435,6 +452,72 @@ fn resolve_db_path(path: &Path) -> PathBuf {
     } else {
         path.to_path_buf()
     }
+}
+
+/// The package's Images/ folder, given either the package directory or
+/// its Music_data file directly.
+fn images_dir(db: &Path) -> PathBuf {
+    if db.is_dir() {
+        db.join("Images")
+    } else {
+        db.parent()
+            .map(|p| p.join("Images"))
+            .unwrap_or_else(|| PathBuf::from("Images"))
+    }
+}
+
+/// Lowercase alphanumeric words joined by underscores, truncated — same
+/// shape as the filenames already used for existing covers (observed in
+/// the package's own Images/ folder, e.g. "6_f_parsley_sage_rosemary_a.jpg").
+fn slugify(title: &str, max_len: usize) -> String {
+    let mut slug = String::new();
+    for c in title.chars() {
+        if c.is_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+        } else if !slug.ends_with('_') && !slug.is_empty() {
+            slug.push('_');
+        }
+    }
+    let slug = slug.trim_matches('_');
+    slug.chars().take(max_len).collect()
+}
+
+fn set_cover(db: &Path, album_id: i64, front: Option<&Path>, back: Option<&Path>) -> Result<()> {
+    ensure_not_real_collection(db)?;
+    let db_path = resolve_db_path(db);
+    let images = images_dir(db);
+    std::fs::create_dir_all(&images)?;
+
+    let conn = Connection::open(&db_path)
+        .with_context(|| format!("ouverture de {}", db_path.display()))?;
+    let title: String = conn
+        .query_row(
+            "SELECT ZTITLE FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
+            [album_id, ENT_ALBUM],
+            |row| row.get(0),
+        )
+        .with_context(|| format!("Aucun album avec l'id {album_id}"))?;
+    let slug = slugify(&title, 28);
+
+    for (source, side, column) in [(front, "f", "ZFRONTCOVER"), (back, "b", "ZBACKCOVER")] {
+        if let Some(source) = source {
+            let ext = source
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("jpg")
+                .to_lowercase();
+            let filename = format!("{album_id}_{side}_{slug}.{ext}");
+            std::fs::copy(source, images.join(&filename)).with_context(|| {
+                format!("copie de {} vers Images/{filename}", source.display())
+            })?;
+            conn.execute(
+                &format!("UPDATE ZCOLLECTIBLE SET {column} = ?1 WHERE Z_PK = ?2"),
+                rusqlite::params![filename, album_id],
+            )?;
+            println!("Images/{filename} <- {}", source.display());
+        }
+    }
+    Ok(())
 }
 
 /// Tracks Z_PRIMARYKEY.Z_MAX per entity across a whole plan (several new
@@ -1000,6 +1083,14 @@ fn main() -> Result<()> {
             conn.execute_batch(&plan_sql)
                 .with_context(|| "exécution du plan")?;
             println!("Plan exécuté dans: {}", db_path.display());
+        }
+        Command::SetCover {
+            db,
+            id,
+            front,
+            back,
+        } => {
+            set_cover(&db, id, front.as_deref(), back.as_deref())?;
         }
     }
     Ok(())
