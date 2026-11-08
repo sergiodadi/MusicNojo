@@ -43,16 +43,37 @@ struct Disc {
 }
 
 #[derive(Serialize)]
+struct Credit {
+    name: String,
+    // ZCREDIT.ZROLEID: no corresponding label exists anywhere in
+    // Music_data itself — left unresolved, not mapped to text. Flagged
+    // separately rather than guessed.
+    role_id: Option<i64>,
+}
+
+#[derive(Serialize)]
 struct Album {
     id: i64,
     title: String,
     artists: Vec<String>,
+    composers: Vec<String>,
+    conductors: Vec<String>,
+    musicians: Vec<String>,
+    orchestras: Vec<String>,
+    choruses: Vec<String>,
+    credits: Vec<Credit>,
     genres: Vec<String>,
     label: Option<String>,
     format: Option<String>,
     country: Option<String>,
+    condition: Option<String>,
+    packaging: Option<String>,
+    vinyl_color: Option<String>,
+    spars: Option<String>,
     release_year: Option<String>,
     rating: Option<i64>,
+    notes: Option<String>,
+    upc: Option<String>,
     track_count: i64,
     discs: Vec<Disc>,
 }
@@ -68,18 +89,47 @@ fn resolve_simple_lookup(conn: &Connection, table: &str, pk: i64) -> Result<Opti
     Ok(name)
 }
 
-fn load_artists(conn: &Connection, album_pk: i64) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT p.ZDISPLAYNAME FROM ZARTIST a \
-         JOIN ZARTISTPERSON ap ON ap.Z_PK = a.ZARTISTPERSON \
-         JOIN ZPERSONDELEGATE p ON p.Z_PK = ap.ZDELEGATE \
-         WHERE a.ZALBUM = ?1 ORDER BY a.ZRANK",
-    )?;
+// Artist/Composer/Conductor/Musician/Orchestra/Chorus each have their own
+// dedicated entity + person-delegate pair (unlike the generic Credit
+// entity below), so none of these roles need an id-to-label mapping.
+fn load_role_names(
+    conn: &Connection,
+    role_table: &str,
+    person_table: &str,
+    person_fk: &str,
+    album_pk: i64,
+) -> Result<Vec<String>> {
+    let sql = format!(
+        "SELECT p.ZDISPLAYNAME FROM {role_table} r \
+         JOIN {person_table} pt ON pt.Z_PK = r.{person_fk} \
+         JOIN ZPERSONDELEGATE p ON p.Z_PK = pt.ZDELEGATE \
+         WHERE r.ZALBUM = ?1 ORDER BY r.ZRANK"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let names = stmt
         .query_map([album_pk], |row| row.get::<_, String>(0))?
         .filter_map(|r| r.ok())
         .collect();
     Ok(names)
+}
+
+fn load_credits(conn: &Connection, album_pk: i64) -> Result<Vec<Credit>> {
+    let mut stmt = conn.prepare(
+        "SELECT p.ZDISPLAYNAME, c.ZROLEID FROM ZCREDIT c \
+         JOIN ZCREDITPERSON cp ON cp.Z_PK = c.ZCREDITPERSON \
+         JOIN ZPERSONDELEGATE p ON p.Z_PK = cp.ZDELEGATE \
+         WHERE c.ZALBUM = ?1 ORDER BY c.ZRANK",
+    )?;
+    let credits = stmt
+        .query_map([album_pk], |row| {
+            Ok(Credit {
+                name: row.get(0)?,
+                role_id: row.get(1)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(credits)
 }
 
 fn load_genres(conn: &Connection, album_pk: i64) -> Result<Vec<String>> {
@@ -138,9 +188,11 @@ fn load_discs(conn: &Connection, album_pk: i64) -> Result<Vec<Disc>> {
     Ok(discs)
 }
 
+#[allow(clippy::type_complexity)]
 fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
     let mut stmt = conn.prepare(
-        "SELECT Z_PK, ZTITLE, ZFORMAT, ZCOUNTRY, ZLABEL, ZRELEASEYEAR, ZMYRATING, ZNRTRACKS \
+        "SELECT Z_PK, ZTITLE, ZFORMAT, ZCOUNTRY, ZLABEL, ZCONDITION, ZPACKAGING, \
+                ZVINYLCOLOR, ZSPARS, ZRELEASEYEAR, ZMYRATING, ZNOTES, ZUPC, ZNRTRACKS \
          FROM ZCOLLECTIBLE WHERE Z_ENT = ?1 ORDER BY Z_PK",
     )?;
     let rows: Vec<(
@@ -149,8 +201,14 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
         Option<i64>,
         Option<i64>,
         Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
+        Option<i64>,
         Option<String>,
         Option<i64>,
+        Option<String>,
+        Option<String>,
         i64,
     )> = stmt
         .query_map([ENT_ALBUM], |row| {
@@ -163,26 +221,69 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
                 row.get(5)?,
                 row.get(6)?,
                 row.get(7)?,
+                row.get(8)?,
+                row.get(9)?,
+                row.get(10)?,
+                row.get(11)?,
+                row.get(12)?,
+                row.get(13)?,
             ))
         })?
         .filter_map(|r| r.ok())
         .collect();
 
     let mut albums = Vec::with_capacity(rows.len());
-    for (id, title, format_pk, country_pk, label_pk, release_year, rating, track_count) in rows {
-        let format = format_pk
-            .map(|pk| resolve_simple_lookup(conn, "ZFORMAT", pk))
-            .transpose()?
-            .flatten();
-        let country = country_pk
-            .map(|pk| resolve_simple_lookup(conn, "ZCOUNTRY", pk))
-            .transpose()?
-            .flatten();
-        let label = label_pk
-            .map(|pk| resolve_simple_lookup(conn, "ZLABEL", pk))
-            .transpose()?
-            .flatten();
-        let artists = load_artists(conn, id)?;
+    for (
+        id,
+        title,
+        format_pk,
+        country_pk,
+        label_pk,
+        condition_pk,
+        packaging_pk,
+        vinyl_color_pk,
+        spars_pk,
+        release_year,
+        rating,
+        notes,
+        upc,
+        track_count,
+    ) in rows
+    {
+        let resolve = |table: &str, pk: Option<i64>| -> Result<Option<String>> {
+            pk.map(|pk| resolve_simple_lookup(conn, table, pk))
+                .transpose()
+                .map(|o| o.flatten())
+        };
+        let format = resolve("ZFORMAT", format_pk)?;
+        let country = resolve("ZCOUNTRY", country_pk)?;
+        let label = resolve("ZLABEL", label_pk)?;
+        let condition = resolve("ZCONDITION", condition_pk)?;
+        let packaging = resolve("ZPACKAGING", packaging_pk)?;
+        let vinyl_color = resolve("ZVINYLCOLOR", vinyl_color_pk)?;
+        let spars = resolve("ZSPARS", spars_pk)?;
+
+        let artists = load_role_names(conn, "ZARTIST", "ZARTISTPERSON", "ZARTISTPERSON", id)?;
+        let composers =
+            load_role_names(conn, "ZCOMPOSER", "ZCOMPOSERPERSON", "ZCOMPOSERPERSON", id)?;
+        let conductors = load_role_names(
+            conn,
+            "ZCONDUCTOR",
+            "ZCONDUCTORPERSON",
+            "ZCONDUCTORPERSON",
+            id,
+        )?;
+        let musicians =
+            load_role_names(conn, "ZMUSICIAN", "ZMUSICIANPERSON", "ZMUSICIANPERSON", id)?;
+        let orchestras = load_role_names(
+            conn,
+            "ZORCHESTRA",
+            "ZORCHESTRAPERSON",
+            "ZORCHESTRAPERSON",
+            id,
+        )?;
+        let choruses = load_role_names(conn, "ZCHORUS", "ZCHORUSPERSON", "ZCHORUSPERSON", id)?;
+        let credits = load_credits(conn, id)?;
         let genres = load_genres(conn, id)?;
         let discs = load_discs(conn, id)?;
 
@@ -190,12 +291,24 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             id,
             title,
             artists,
+            composers,
+            conductors,
+            musicians,
+            orchestras,
+            choruses,
+            credits,
             genres,
             label,
             format,
             country,
+            condition,
+            packaging,
+            vinyl_color,
+            spars,
             release_year,
             rating,
+            notes,
+            upc,
             track_count,
             discs,
         });
@@ -209,25 +322,58 @@ fn write_csv(path: &PathBuf, albums: &[Album]) -> Result<()> {
         "id",
         "title",
         "artists",
+        "composers",
+        "conductors",
+        "musicians",
+        "orchestras",
+        "choruses",
+        "credits",
         "genres",
         "label",
         "format",
         "country",
+        "condition",
+        "packaging",
+        "vinyl_color",
+        "spars",
         "release_year",
         "rating",
+        "notes",
+        "upc",
         "track_count",
     ])?;
     for album in albums {
+        let credits = album
+            .credits
+            .iter()
+            .map(|c| match c.role_id {
+                Some(id) => format!("{} (role_id={})", c.name, id),
+                None => c.name.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
         writer.write_record([
             album.id.to_string(),
             album.title.clone(),
             album.artists.join("; "),
+            album.composers.join("; "),
+            album.conductors.join("; "),
+            album.musicians.join("; "),
+            album.orchestras.join("; "),
+            album.choruses.join("; "),
+            credits,
             album.genres.join("; "),
             album.label.clone().unwrap_or_default(),
             album.format.clone().unwrap_or_default(),
             album.country.clone().unwrap_or_default(),
+            album.condition.clone().unwrap_or_default(),
+            album.packaging.clone().unwrap_or_default(),
+            album.vinyl_color.clone().unwrap_or_default(),
+            album.spars.clone().unwrap_or_default(),
             album.release_year.clone().unwrap_or_default(),
             album.rating.map(|r| r.to_string()).unwrap_or_default(),
+            album.notes.clone().unwrap_or_default(),
+            album.upc.clone().unwrap_or_default(),
             album.track_count.to_string(),
         ])?;
     }
@@ -268,4 +414,33 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exports_against_local_test_copy_if_present() {
+        let package = std::path::Path::new("testdata/MyCollection.mucp");
+        if !package.exists() {
+            eprintln!(
+                "testdata/MyCollection.mucp absent (copie personnelle, non committée) — test ignoré"
+            );
+            return;
+        }
+        let conn = Connection::open_with_flags(
+            package.join("Music_data"),
+            OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .unwrap();
+        let albums = load_albums(&conn).unwrap();
+        assert!(!albums.is_empty());
+        let total_tracks: i64 = albums
+            .iter()
+            .flat_map(|a| &a.discs)
+            .map(|d| d.tracks.len() as i64)
+            .sum();
+        assert!(total_tracks > 0);
+    }
 }
