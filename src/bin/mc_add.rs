@@ -1,0 +1,477 @@
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
+use clap::{Parser, Subcommand};
+use rusqlite::Connection;
+
+// Core Data entity ids, read from Z_PRIMARYKEY (same convention as
+// mc_export's ENT_* constants — stable per app version, hardcoded here).
+const ENT_ALBUM: i64 = 10;
+const ENT_DISC: i64 = 11;
+const ENT_TRACK: i64 = 14;
+const ENT_ARTIST: i64 = 3;
+const ENT_ARTIST_PERSON: i64 = 4;
+const ENT_FORMAT: i64 = 27;
+const ENT_GENRE: i64 = 28;
+const ENT_LABEL: i64 = 32;
+const ENT_COUNTRY: i64 = 23;
+const ENT_LOOKUP_ITEM_DELEGATE: i64 = 39;
+const ENT_PERSON_DELEGATE: i64 = 46;
+
+#[derive(Parser)]
+struct Args {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Compute what would be inserted, without writing anything
+    Plan {
+        /// Path to a MyCollection.mucp package (never the live file — see the safety gate)
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        title: String,
+        #[arg(long = "artist")]
+        artists: Vec<String>,
+        #[arg(long = "genre")]
+        genres: Vec<String>,
+        #[arg(long)]
+        format: Option<String>,
+        #[arg(long)]
+        label: Option<String>,
+        #[arg(long)]
+        country: Option<String>,
+        /// One track title per occurrence, in order
+        #[arg(long = "track")]
+        tracks: Vec<String>,
+        /// Write the plan's SQL to this file instead of stdout
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Execute a plan file's SQL against the database, inside one transaction
+    Commit {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        plan: PathBuf,
+    },
+}
+
+/// Refuses to operate on what looks like a real, live Music Collector
+/// collection — only ever a test/working copy. Same hard rule as the
+/// BookNojo project's tools.
+fn ensure_not_real_collection(path: &Path) -> Result<()> {
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let text = canonical.to_string_lossy().to_lowercase();
+    if text.contains("collectorz") && (text.contains("music collector") || text.contains("music_collector")) {
+        bail!(
+            "{} ressemble au chemin d'une vraie collection Music Collector \
+             (~/Documents/Collectorz/...) — refusé. N'utiliser que des copies de test.",
+            canonical.display()
+        );
+    }
+    Ok(())
+}
+
+fn resolve_db_path(path: &Path) -> PathBuf {
+    if path.is_dir() {
+        path.join("Music_data")
+    } else {
+        path.to_path_buf()
+    }
+}
+
+/// Tracks Z_PRIMARYKEY.Z_MAX per entity across a whole plan (several new
+/// rows of the same kind in one call must get distinct, sequential ids
+/// before anything is actually written).
+struct PkAllocator<'a> {
+    conn: &'a Connection,
+    cached_max: HashMap<String, i64>,
+}
+
+impl<'a> PkAllocator<'a> {
+    fn new(conn: &'a Connection) -> Self {
+        PkAllocator {
+            conn,
+            cached_max: HashMap::new(),
+        }
+    }
+
+    fn next(&mut self, entity_name: &str) -> Result<i64> {
+        if !self.cached_max.contains_key(entity_name) {
+            let current: i64 = self.conn.query_row(
+                "SELECT Z_MAX FROM Z_PRIMARYKEY WHERE Z_NAME = ?1",
+                [entity_name],
+                |row| row.get(0),
+            )?;
+            self.cached_max.insert(entity_name.to_string(), current);
+        }
+        let next = self.cached_max[entity_name] + 1;
+        self.cached_max.insert(entity_name.to_string(), next);
+        Ok(next)
+    }
+
+    /// One UPDATE per touched entity, reflecting the final allocated max.
+    fn bump_statements(&self) -> Vec<String> {
+        self.cached_max
+            .iter()
+            .map(|(name, max)| {
+                format!("UPDATE Z_PRIMARYKEY SET Z_MAX = {max} WHERE Z_NAME = '{name}';")
+            })
+            .collect()
+    }
+}
+
+fn sql_quote(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+/// Finds an existing simple lookup (Format/Label/Country/...) by exact
+/// display name, or plans the two inserts needed to create one
+/// (the lookup entity row + its ZLOOKUPITEMDELEGATE row).
+fn resolve_or_create_simple_lookup(
+    conn: &Connection,
+    pks: &mut PkAllocator,
+    sql: &mut Vec<String>,
+    table: &str,
+    entity_name: &str,
+    ent_id: i64,
+    back_ref_column: &str,
+    name: &str,
+) -> Result<i64> {
+    let existing: Option<i64> = conn
+        .query_row(
+            &format!(
+                "SELECT t.Z_PK FROM {table} t \
+                 JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE \
+                 WHERE l.ZDISPLAYNAME = ?1"
+            ),
+            [name],
+            |row| row.get(0),
+        )
+        .ok();
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+
+    let new_id = pks.next(entity_name)?;
+    let new_delegate_id = pks.next("LookupItemDelegate")?;
+    sql.push(format!(
+        "INSERT INTO {table} (Z_PK, Z_ENT, Z_OPT, ZDELEGATE, ZITEMDELEGATE) \
+         VALUES ({new_id}, {ent_id}, 1, {new_delegate_id}, NULL);"
+    ));
+    sql.push(format!(
+        "INSERT INTO ZLOOKUPITEMDELEGATE (Z_PK, Z_ENT, Z_OPT, {back_ref_column}, ZDISPLAYNAME) \
+         VALUES ({new_delegate_id}, {ent}, 1, {new_id}, {name_sql});",
+        ent = ENT_LOOKUP_ITEM_DELEGATE,
+        name_sql = sql_quote(name)
+    ));
+    Ok(new_id)
+}
+
+/// Finds an existing Artist/Composer/.../person by exact display name,
+/// or plans the delegate + role-person rows needed to create one. Only
+/// Artist is wired into the CLI for now; the same shape applies to the
+/// other role tables (Composer, Conductor, Musician, Orchestra, Chorus).
+fn resolve_or_create_person(
+    conn: &Connection,
+    pks: &mut PkAllocator,
+    sql: &mut Vec<String>,
+    person_table: &str,
+    person_entity_name: &str,
+    person_ent_id: i64,
+    back_ref_column: &str,
+    name: &str,
+) -> Result<i64> {
+    let existing: Option<i64> = conn
+        .query_row(
+            &format!(
+                "SELECT pt.Z_PK FROM {person_table} pt \
+                 JOIN ZPERSONDELEGATE p ON p.Z_PK = pt.ZDELEGATE \
+                 WHERE p.ZDISPLAYNAME = ?1"
+            ),
+            [name],
+            |row| row.get(0),
+        )
+        .ok();
+    if let Some(id) = existing {
+        return Ok(id);
+    }
+
+    let new_person_id = pks.next(person_entity_name)?;
+    let new_delegate_id = pks.next("PersonDelegate")?;
+    sql.push(format!(
+        "INSERT INTO {person_table} (Z_PK, Z_ENT, Z_OPT, ZDELEGATE, ZITEMDELEGATE) \
+         VALUES ({new_person_id}, {person_ent_id}, 1, {new_delegate_id}, NULL);"
+    ));
+    sql.push(format!(
+        "INSERT INTO ZPERSONDELEGATE (Z_PK, Z_ENT, Z_OPT, {back_ref_column}, ZDISPLAYNAME, ZSORTNAME) \
+         VALUES ({new_delegate_id}, {ent}, 1, {new_person_id}, {name_sql}, {name_sql});",
+        ent = ENT_PERSON_DELEGATE,
+        name_sql = sql_quote(name)
+    ));
+    Ok(new_person_id)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_plan(
+    conn: &Connection,
+    title: &str,
+    artists: &[String],
+    genres: &[String],
+    format: Option<&str>,
+    label: Option<&str>,
+    country: Option<&str>,
+    tracks: &[String],
+) -> Result<String> {
+    let mut pks = PkAllocator::new(conn);
+    let mut sql: Vec<String> = vec!["BEGIN;".to_string()];
+
+    let format_id = format
+        .map(|name| {
+            resolve_or_create_simple_lookup(
+                conn, &mut pks, &mut sql, "ZFORMAT", "Format", ENT_FORMAT, "ZFORMAT", name,
+            )
+        })
+        .transpose()?;
+    let label_id = label
+        .map(|name| {
+            resolve_or_create_simple_lookup(
+                conn, &mut pks, &mut sql, "ZLABEL", "Label", ENT_LABEL, "ZLABEL", name,
+            )
+        })
+        .transpose()?;
+    let country_id = country
+        .map(|name| {
+            resolve_or_create_simple_lookup(
+                conn, &mut pks, &mut sql, "ZCOUNTRY", "Country", ENT_COUNTRY, "ZCOUNTRY", name,
+            )
+        })
+        .transpose()?;
+
+    let album_id = pks.next("Collectible")?;
+    sql.push(format!(
+        "INSERT INTO ZCOLLECTIBLE \
+         (Z_PK, Z_ENT, Z_OPT, ZCOLLECTIONSTATUS, ZNRTRACKS, ZFORMAT, ZCOUNTRY, ZLABEL, ZTITLE) \
+         VALUES ({album_id}, {ENT_ALBUM}, 1, 2, {track_count}, {format_sql}, {country_sql}, {label_sql}, {title_sql});",
+        track_count = tracks.len(),
+        format_sql = format_id.map(|v| v.to_string()).unwrap_or_else(|| "NULL".into()),
+        country_sql = country_id.map(|v| v.to_string()).unwrap_or_else(|| "NULL".into()),
+        label_sql = label_id.map(|v| v.to_string()).unwrap_or_else(|| "NULL".into()),
+        title_sql = sql_quote(title),
+    ));
+
+    for (rank, artist_name) in artists.iter().enumerate() {
+        let artist_person_id = resolve_or_create_person(
+            conn,
+            &mut pks,
+            &mut sql,
+            "ZARTISTPERSON",
+            "ArtistPerson",
+            ENT_ARTIST_PERSON,
+            "ZARTISTPERSON",
+            artist_name,
+        )?;
+        let artist_id = pks.next("Artist")?;
+        sql.push(format!(
+            "INSERT INTO ZARTIST (Z_PK, Z_ENT, Z_OPT, ZRANK, ZALBUM, ZARTISTPERSON) \
+             VALUES ({artist_id}, {ENT_ARTIST}, 1, {rank}, {album_id}, {artist_person_id});"
+        ));
+    }
+
+    for genre_name in genres {
+        let genre_id = resolve_or_create_simple_lookup(
+            conn, &mut pks, &mut sql, "ZGENRE", "Genre", ENT_GENRE, "ZGENRE", genre_name,
+        )?;
+        sql.push(format!(
+            "INSERT INTO Z_10GENRES (Z_10ALBUMS2, Z_28GENRES) VALUES ({album_id}, {genre_id});"
+        ));
+    }
+
+    if !tracks.is_empty() {
+        let disc_id = pks.next("Collectible")?;
+        sql.push(format!(
+            "INSERT INTO ZCOLLECTIBLE (Z_PK, Z_ENT, Z_OPT, ZALBUM) \
+             VALUES ({disc_id}, {ENT_DISC}, 1, {album_id});"
+        ));
+        for (position, track_title) in tracks.iter().enumerate() {
+            let track_id = pks.next("Collectible")?;
+            sql.push(format!(
+                "INSERT INTO ZCOLLECTIBLE (Z_PK, Z_ENT, Z_OPT, ZDISC1, ZPOSITION, ZTITLE) \
+                 VALUES ({track_id}, {ENT_TRACK}, 1, {disc_id}, {position}, {title_sql});",
+                position = position + 1,
+                title_sql = sql_quote(track_title),
+            ));
+        }
+    }
+
+    sql.extend(pks.bump_statements());
+    sql.push("COMMIT;".to_string());
+    Ok(sql.join("\n"))
+}
+
+fn main() -> Result<()> {
+    let args = Args::parse();
+    match args.command {
+        Command::Plan {
+            db,
+            title,
+            artists,
+            genres,
+            format,
+            label,
+            country,
+            tracks,
+            out,
+        } => {
+            ensure_not_real_collection(&db)?;
+            let db_path = resolve_db_path(&db);
+            let conn = Connection::open_with_flags(
+                &db_path,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
+            .with_context(|| format!("ouverture de {}", db_path.display()))?;
+
+            let plan_sql = build_plan(
+                &conn,
+                &title,
+                &artists,
+                &genres,
+                format.as_deref(),
+                label.as_deref(),
+                country.as_deref(),
+                &tracks,
+            )?;
+
+            match out {
+                Some(path) => {
+                    std::fs::write(&path, &plan_sql)
+                        .with_context(|| format!("écriture de {}", path.display()))?;
+                    println!("Plan écrit dans: {}", path.display());
+                }
+                None => println!("{plan_sql}"),
+            }
+            println!("(Aucune écriture dans {} — ce SQL n'a pas été exécuté.)", db_path.display());
+        }
+        Command::Commit { db, plan } => {
+            ensure_not_real_collection(&db)?;
+            let db_path = resolve_db_path(&db);
+            let plan_sql = std::fs::read_to_string(&plan)
+                .with_context(|| format!("lecture de {}", plan.display()))?;
+
+            let conn = Connection::open(&db_path)
+                .with_context(|| format!("ouverture de {}", db_path.display()))?;
+            // plan_sql already wraps its statements in BEGIN;/COMMIT;
+            conn.execute_batch(&plan_sql)
+                .with_context(|| "exécution du plan")?;
+            println!("Plan exécuté dans: {}", db_path.display());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_writable(path: &Path) -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        for entry in walk(path)? {
+            let mode = if entry.is_dir() { 0o755 } else { 0o644 };
+            std::fs::set_permissions(&entry, std::fs::Permissions::from_mode(mode))?;
+        }
+        Ok(())
+    }
+
+    fn walk(dir: &Path) -> Result<Vec<PathBuf>> {
+        let mut out = vec![dir.to_path_buf()];
+        for entry in std::fs::read_dir(dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                out.extend(walk(&entry.path())?);
+            } else {
+                out.push(entry.path());
+            }
+        }
+        Ok(out)
+    }
+
+    fn copy_dir(src: &Path, dst: &Path) -> Result<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let dst_path = dst.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_dir(&entry.path(), &dst_path)?;
+            } else {
+                std::fs::copy(entry.path(), &dst_path)?;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn plan_and_commit_add_a_readable_album() {
+        let source = Path::new("testdata/MyCollection.mucp");
+        if !source.exists() {
+            eprintln!(
+                "testdata/MyCollection.mucp absent (copie personnelle, non committée) — test ignoré"
+            );
+            return;
+        }
+
+        let scratch = std::env::temp_dir().join(format!(
+            "mc_add_test_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        copy_dir(source, &scratch).unwrap();
+        // testdata/ is read-only (chmod 444/555); std::fs::copy preserves
+        // that, so make this disposable scratch copy writable again.
+        make_writable(&scratch).unwrap();
+        // chmod/ownership issues aside, a disposable scratch copy is never
+        // the shared testdata/ or testdata-rw/ fixtures, nor the real file.
+        ensure_not_real_collection(&scratch).unwrap();
+
+        let db_path = scratch.join("Music_data");
+        let read_conn =
+            Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        let plan_sql = build_plan(
+            &read_conn,
+            "Test unitaire mc_add",
+            &["Artiste de test".to_string()],
+            &["Genre de test".to_string()],
+            Some("CD"),
+            None,
+            None,
+            &["Piste unique".to_string()],
+        )
+        .unwrap();
+        drop(read_conn);
+
+        let write_conn = Connection::open(&db_path).unwrap();
+        write_conn.execute_batch(&plan_sql).unwrap();
+        drop(write_conn);
+
+        let verify_conn =
+            Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        let title: String = verify_conn
+            .query_row(
+                "SELECT ZTITLE FROM ZCOLLECTIBLE WHERE ZTITLE = 'Test unitaire mc_add'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(title, "Test unitaire mc_add");
+
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+}

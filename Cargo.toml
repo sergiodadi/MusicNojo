@@ -8,6 +8,10 @@ license = "MIT"
 name = "mc_export"
 path = "src/main.rs"
 
+[[bin]]
+name = "mc_add"
+path = "src/bin/mc_add.rs"
+
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
