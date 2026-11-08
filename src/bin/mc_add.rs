@@ -16,6 +16,12 @@ const ENT_FORMAT: i64 = 27;
 const ENT_GENRE: i64 = 28;
 const ENT_LABEL: i64 = 32;
 const ENT_COUNTRY: i64 = 23;
+const ENT_CONDITION: i64 = 20;
+const ENT_PACKAGING: i64 = 45;
+const ENT_VINYL_COLOR: i64 = 58;
+const ENT_SPARS: i64 = 50;
+const ENT_OWNER: i64 = 44;
+const ENT_LOCATION: i64 = 38;
 const ENT_LOOKUP_ITEM_DELEGATE: i64 = 39;
 const ENT_PERSON_DELEGATE: i64 = 46;
 
@@ -25,10 +31,40 @@ struct Args {
     command: Command,
 }
 
+#[derive(clap::Args, Default)]
+struct AlbumFields {
+    #[arg(long)]
+    format: Option<String>,
+    #[arg(long)]
+    label: Option<String>,
+    #[arg(long)]
+    country: Option<String>,
+    #[arg(long)]
+    condition: Option<String>,
+    #[arg(long)]
+    packaging: Option<String>,
+    #[arg(long = "vinyl-color")]
+    vinyl_color: Option<String>,
+    #[arg(long)]
+    spars: Option<String>,
+    #[arg(long)]
+    owner: Option<String>,
+    #[arg(long)]
+    location: Option<String>,
+    #[arg(long = "release-year")]
+    release_year: Option<String>,
+    #[arg(long)]
+    rating: Option<i64>,
+    #[arg(long)]
+    notes: Option<String>,
+    #[arg(long)]
+    upc: Option<String>,
+}
+
 #[derive(Subcommand)]
 enum Command {
-    /// Compute what would be inserted, without writing anything
-    Plan {
+    /// Compute the SQL to insert a new album, without writing anything
+    AddPlan {
         /// Path to a MyCollection.mucp package (never the live file — see the safety gate)
         #[arg(long)]
         db: PathBuf,
@@ -38,16 +74,48 @@ enum Command {
         artists: Vec<String>,
         #[arg(long = "genre")]
         genres: Vec<String>,
-        #[arg(long)]
-        format: Option<String>,
-        #[arg(long)]
-        label: Option<String>,
-        #[arg(long)]
-        country: Option<String>,
+        #[command(flatten)]
+        fields: AlbumFields,
         /// One track title per occurrence, in order
         #[arg(long = "track")]
         tracks: Vec<String>,
         /// Write the plan's SQL to this file instead of stdout
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Compute the SQL to modify an existing album (by id), without writing anything
+    EditPlan {
+        #[arg(long)]
+        db: PathBuf,
+        /// The album's Z_PK (see mc_export's JSON output, field "id")
+        #[arg(long)]
+        id: i64,
+        #[arg(long)]
+        title: Option<String>,
+        #[command(flatten)]
+        fields: AlbumFields,
+        /// Replace the artist list (even with zero --artist, which clears it)
+        #[arg(long)]
+        replace_artists: bool,
+        #[arg(long = "artist")]
+        artists: Vec<String>,
+        /// Replace the genre list (even with zero --genre, which clears it)
+        #[arg(long)]
+        replace_genres: bool,
+        #[arg(long = "genre")]
+        genres: Vec<String>,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+    /// Compute the SQL to delete an album (by id) and everything specific
+    /// to it (its artists/genres links, discs, tracks) — never the shared
+    /// lookups (Format/Label/.../ArtistPerson), which other albums may
+    /// still reference.
+    DeletePlan {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        id: i64,
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -132,6 +200,7 @@ fn sql_quote(s: &str) -> String {
 /// Finds an existing simple lookup (Format/Label/Country/...) by exact
 /// display name, or plans the two inserts needed to create one
 /// (the lookup entity row + its ZLOOKUPITEMDELEGATE row).
+#[allow(clippy::too_many_arguments)]
 fn resolve_or_create_simple_lookup(
     conn: &Connection,
     pks: &mut PkAllocator,
@@ -176,6 +245,7 @@ fn resolve_or_create_simple_lookup(
 /// or plans the delegate + role-person rows needed to create one. Only
 /// Artist is wired into the CLI for now; the same shape applies to the
 /// other role tables (Composer, Conductor, Musician, Orchestra, Chorus).
+#[allow(clippy::too_many_arguments)]
 fn resolve_or_create_person(
     conn: &Connection,
     pks: &mut PkAllocator,
@@ -216,52 +286,110 @@ fn resolve_or_create_person(
     Ok(new_person_id)
 }
 
+// (field_name_in_struct_access, column, entity_name, ent_id, back_ref_column)
+// handled via a small helper below instead of a table, since each lookup
+// has a differently-named accessor on AlbumFields.
 #[allow(clippy::too_many_arguments)]
+fn resolve_simple_fields(
+    conn: &Connection,
+    pks: &mut PkAllocator,
+    sql: &mut Vec<String>,
+    fields: &AlbumFields,
+) -> Result<HashMap<&'static str, i64>> {
+    let mut ids = HashMap::new();
+    macro_rules! resolve {
+        ($field:expr, $key:literal, $table:literal, $entity:literal, $ent_id:expr, $back_ref:literal) => {
+            if let Some(name) = $field.as_deref() {
+                let id = resolve_or_create_simple_lookup(
+                    conn, pks, sql, $table, $entity, $ent_id, $back_ref, name,
+                )?;
+                ids.insert($key, id);
+            }
+        };
+    }
+    resolve!(fields.format, "format", "ZFORMAT", "Format", ENT_FORMAT, "ZFORMAT");
+    resolve!(fields.label, "label", "ZLABEL", "Label", ENT_LABEL, "ZLABEL");
+    resolve!(fields.country, "country", "ZCOUNTRY", "Country", ENT_COUNTRY, "ZCOUNTRY");
+    resolve!(fields.condition, "condition", "ZCONDITION", "Condition", ENT_CONDITION, "ZCONDITION");
+    resolve!(fields.packaging, "packaging", "ZPACKAGING", "Packaging", ENT_PACKAGING, "ZPACKAGING");
+    resolve!(fields.vinyl_color, "vinyl_color", "ZVINYLCOLOR", "VinylColor", ENT_VINYL_COLOR, "ZVINYLCOLOR");
+    resolve!(fields.spars, "spars", "ZSPARS", "Spars", ENT_SPARS, "ZSPARS");
+    resolve!(fields.owner, "owner", "ZOWNER", "Owner", ENT_OWNER, "ZOWNER");
+    resolve!(fields.location, "location", "ZLOCATION", "Location", ENT_LOCATION, "ZLOCATION");
+    Ok(ids)
+}
+
+fn scalar_text_assignments(fields: &AlbumFields) -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    if let Some(v) = &fields.release_year {
+        out.push(("ZRELEASEYEAR", sql_quote(v)));
+    }
+    if let Some(v) = fields.rating {
+        out.push(("ZMYRATING", v.to_string()));
+    }
+    if let Some(v) = &fields.notes {
+        out.push(("ZNOTES", sql_quote(v)));
+    }
+    if let Some(v) = &fields.upc {
+        out.push(("ZUPC", sql_quote(v)));
+    }
+    out
+}
+
 fn build_plan(
     conn: &Connection,
     title: &str,
     artists: &[String],
     genres: &[String],
-    format: Option<&str>,
-    label: Option<&str>,
-    country: Option<&str>,
+    fields: &AlbumFields,
     tracks: &[String],
 ) -> Result<String> {
     let mut pks = PkAllocator::new(conn);
     let mut sql: Vec<String> = vec!["BEGIN;".to_string()];
 
-    let format_id = format
-        .map(|name| {
-            resolve_or_create_simple_lookup(
-                conn, &mut pks, &mut sql, "ZFORMAT", "Format", ENT_FORMAT, "ZFORMAT", name,
-            )
-        })
-        .transpose()?;
-    let label_id = label
-        .map(|name| {
-            resolve_or_create_simple_lookup(
-                conn, &mut pks, &mut sql, "ZLABEL", "Label", ENT_LABEL, "ZLABEL", name,
-            )
-        })
-        .transpose()?;
-    let country_id = country
-        .map(|name| {
-            resolve_or_create_simple_lookup(
-                conn, &mut pks, &mut sql, "ZCOUNTRY", "Country", ENT_COUNTRY, "ZCOUNTRY", name,
-            )
-        })
-        .transpose()?;
+    let lookup_ids = resolve_simple_fields(conn, &mut pks, &mut sql, fields)?;
 
     let album_id = pks.next("Collectible")?;
+    let mut columns = vec![
+        "Z_PK".to_string(),
+        "Z_ENT".to_string(),
+        "Z_OPT".to_string(),
+        "ZCOLLECTIONSTATUS".to_string(),
+        "ZNRTRACKS".to_string(),
+        "ZTITLE".to_string(),
+    ];
+    let mut values = vec![
+        album_id.to_string(),
+        ENT_ALBUM.to_string(),
+        "1".to_string(),
+        "2".to_string(),
+        tracks.len().to_string(),
+        sql_quote(title),
+    ];
+    for (key, column) in [
+        ("format", "ZFORMAT"),
+        ("label", "ZLABEL"),
+        ("country", "ZCOUNTRY"),
+        ("condition", "ZCONDITION"),
+        ("packaging", "ZPACKAGING"),
+        ("vinyl_color", "ZVINYLCOLOR"),
+        ("spars", "ZSPARS"),
+        ("owner", "ZOWNER"),
+        ("location", "ZLOCATION"),
+    ] {
+        if let Some(id) = lookup_ids.get(key) {
+            columns.push(column.to_string());
+            values.push(id.to_string());
+        }
+    }
+    for (column, value) in scalar_text_assignments(fields) {
+        columns.push(column.to_string());
+        values.push(value);
+    }
     sql.push(format!(
-        "INSERT INTO ZCOLLECTIBLE \
-         (Z_PK, Z_ENT, Z_OPT, ZCOLLECTIONSTATUS, ZNRTRACKS, ZFORMAT, ZCOUNTRY, ZLABEL, ZTITLE) \
-         VALUES ({album_id}, {ENT_ALBUM}, 1, 2, {track_count}, {format_sql}, {country_sql}, {label_sql}, {title_sql});",
-        track_count = tracks.len(),
-        format_sql = format_id.map(|v| v.to_string()).unwrap_or_else(|| "NULL".into()),
-        country_sql = country_id.map(|v| v.to_string()).unwrap_or_else(|| "NULL".into()),
-        label_sql = label_id.map(|v| v.to_string()).unwrap_or_else(|| "NULL".into()),
-        title_sql = sql_quote(title),
+        "INSERT INTO ZCOLLECTIBLE ({}) VALUES ({});",
+        columns.join(", "),
+        values.join(", ")
     ));
 
     for (rank, artist_name) in artists.iter().enumerate() {
@@ -313,48 +441,226 @@ fn build_plan(
     Ok(sql.join("\n"))
 }
 
+#[allow(clippy::too_many_arguments)]
+fn build_edit_plan(
+    conn: &Connection,
+    album_id: i64,
+    title: Option<&str>,
+    fields: &AlbumFields,
+    replace_artists: bool,
+    artists: &[String],
+    replace_genres: bool,
+    genres: &[String],
+) -> Result<String> {
+    let exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
+        [album_id, ENT_ALBUM],
+        |row| row.get(0),
+    )?;
+    if exists == 0 {
+        bail!("Aucun album avec l'id {album_id}");
+    }
+
+    let mut pks = PkAllocator::new(conn);
+    let mut sql: Vec<String> = vec!["BEGIN;".to_string()];
+
+    let lookup_ids = resolve_simple_fields(conn, &mut pks, &mut sql, fields)?;
+    let mut assignments: Vec<String> = Vec::new();
+    if let Some(t) = title {
+        assignments.push(format!("ZTITLE = {}", sql_quote(t)));
+    }
+    for (key, column) in [
+        ("format", "ZFORMAT"),
+        ("label", "ZLABEL"),
+        ("country", "ZCOUNTRY"),
+        ("condition", "ZCONDITION"),
+        ("packaging", "ZPACKAGING"),
+        ("vinyl_color", "ZVINYLCOLOR"),
+        ("spars", "ZSPARS"),
+        ("owner", "ZOWNER"),
+        ("location", "ZLOCATION"),
+    ] {
+        if let Some(id) = lookup_ids.get(key) {
+            assignments.push(format!("{column} = {id}"));
+        }
+    }
+    for (column, value) in scalar_text_assignments(fields) {
+        assignments.push(format!("{column} = {value}"));
+    }
+    if !assignments.is_empty() {
+        sql.push(format!(
+            "UPDATE ZCOLLECTIBLE SET {} WHERE Z_PK = {album_id};",
+            assignments.join(", ")
+        ));
+    }
+
+    if replace_artists {
+        sql.push(format!("DELETE FROM ZARTIST WHERE ZALBUM = {album_id};"));
+        for (rank, artist_name) in artists.iter().enumerate() {
+            let artist_person_id = resolve_or_create_person(
+                conn,
+                &mut pks,
+                &mut sql,
+                "ZARTISTPERSON",
+                "ArtistPerson",
+                ENT_ARTIST_PERSON,
+                "ZARTISTPERSON",
+                artist_name,
+            )?;
+            let artist_id = pks.next("Artist")?;
+            sql.push(format!(
+                "INSERT INTO ZARTIST (Z_PK, Z_ENT, Z_OPT, ZRANK, ZALBUM, ZARTISTPERSON) \
+                 VALUES ({artist_id}, {ENT_ARTIST}, 1, {rank}, {album_id}, {artist_person_id});"
+            ));
+        }
+    }
+
+    if replace_genres {
+        sql.push(format!(
+            "DELETE FROM Z_10GENRES WHERE Z_10ALBUMS2 = {album_id};"
+        ));
+        for genre_name in genres {
+            let genre_id = resolve_or_create_simple_lookup(
+                conn, &mut pks, &mut sql, "ZGENRE", "Genre", ENT_GENRE, "ZGENRE", genre_name,
+            )?;
+            sql.push(format!(
+                "INSERT INTO Z_10GENRES (Z_10ALBUMS2, Z_28GENRES) VALUES ({album_id}, {genre_id});"
+            ));
+        }
+    }
+
+    sql.extend(pks.bump_statements());
+    sql.push("COMMIT;".to_string());
+    Ok(sql.join("\n"))
+}
+
+/// Deletes an album and everything specific to it — discs, tracks, and
+/// its role/many-to-many link rows — but never the shared lookups
+/// (Format/Label/.../ArtistPerson/PersonDelegate), since other albums
+/// may still reference them. Leaving an unreferenced lookup row behind
+/// is harmless; deleting one still referenced elsewhere is not.
+fn build_delete_plan(conn: &Connection, album_id: i64) -> Result<String> {
+    let exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
+        [album_id, ENT_ALBUM],
+        |row| row.get(0),
+    )?;
+    if exists == 0 {
+        bail!("Aucun album avec l'id {album_id}");
+    }
+
+    let disc_ids: Vec<i64> = conn
+        .prepare("SELECT Z_PK FROM ZCOLLECTIBLE WHERE Z_ENT = ?1 AND ZALBUM = ?2")?
+        .query_map([ENT_DISC, album_id], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+    let disc_list = disc_ids
+        .iter()
+        .map(|d| d.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let mut sql: Vec<String> = vec!["BEGIN;".to_string()];
+    for role_table in [
+        "ZARTIST", "ZCOMPOSER", "ZCONDUCTOR", "ZMUSICIAN", "ZORCHESTRA", "ZCHORUS", "ZCREDIT",
+    ] {
+        sql.push(format!("DELETE FROM {role_table} WHERE ZALBUM = {album_id};"));
+    }
+    sql.push(format!(
+        "DELETE FROM Z_10GENRES WHERE Z_10ALBUMS2 = {album_id};"
+    ));
+    sql.push(format!(
+        "DELETE FROM Z_8TAGS WHERE Z_8COLLECTIBLES = {album_id};"
+    ));
+    sql.push(format!(
+        "DELETE FROM Z_10EXTRAS WHERE Z_10ALBUMS1 = {album_id};"
+    ));
+    sql.push(format!(
+        "DELETE FROM Z_10STUDIOS WHERE Z_10ALBUMS4 = {album_id};"
+    ));
+    if !disc_ids.is_empty() {
+        sql.push(format!(
+            "DELETE FROM ZCOLLECTIBLE WHERE Z_ENT = {ENT_TRACK} AND ZDISC1 IN ({disc_list});"
+        ));
+        sql.push(format!(
+            "DELETE FROM ZCOLLECTIBLE WHERE Z_ENT = {ENT_DISC} AND Z_PK IN ({disc_list});"
+        ));
+    }
+    sql.push(format!(
+        "DELETE FROM ZCOLLECTIBLE WHERE Z_ENT = {ENT_ALBUM} AND Z_PK = {album_id};"
+    ));
+    sql.push("COMMIT;".to_string());
+    Ok(sql.join("\n"))
+}
+
+fn open_readonly(db: &Path) -> Result<(PathBuf, Connection)> {
+    ensure_not_real_collection(db)?;
+    let db_path = resolve_db_path(db);
+    let conn = Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture de {}", db_path.display()))?;
+    Ok((db_path, conn))
+}
+
+fn emit_plan(plan_sql: &str, out: Option<PathBuf>, db_path: &Path) -> Result<()> {
+    match out {
+        Some(path) => {
+            std::fs::write(&path, plan_sql)
+                .with_context(|| format!("écriture de {}", path.display()))?;
+            println!("Plan écrit dans: {}", path.display());
+        }
+        None => println!("{plan_sql}"),
+    }
+    println!(
+        "(Aucune écriture dans {} — ce SQL n'a pas été exécuté.)",
+        db_path.display()
+    );
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let args = Args::parse();
     match args.command {
-        Command::Plan {
+        Command::AddPlan {
             db,
             title,
             artists,
             genres,
-            format,
-            label,
-            country,
+            fields,
             tracks,
             out,
         } => {
-            ensure_not_real_collection(&db)?;
-            let db_path = resolve_db_path(&db);
-            let conn = Connection::open_with_flags(
-                &db_path,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            )
-            .with_context(|| format!("ouverture de {}", db_path.display()))?;
-
-            let plan_sql = build_plan(
+            let (db_path, conn) = open_readonly(&db)?;
+            let plan_sql = build_plan(&conn, &title, &artists, &genres, &fields, &tracks)?;
+            emit_plan(&plan_sql, out, &db_path)?;
+        }
+        Command::EditPlan {
+            db,
+            id,
+            title,
+            fields,
+            replace_artists,
+            artists,
+            replace_genres,
+            genres,
+            out,
+        } => {
+            let (db_path, conn) = open_readonly(&db)?;
+            let plan_sql = build_edit_plan(
                 &conn,
-                &title,
+                id,
+                title.as_deref(),
+                &fields,
+                replace_artists,
                 &artists,
+                replace_genres,
                 &genres,
-                format.as_deref(),
-                label.as_deref(),
-                country.as_deref(),
-                &tracks,
             )?;
-
-            match out {
-                Some(path) => {
-                    std::fs::write(&path, &plan_sql)
-                        .with_context(|| format!("écriture de {}", path.display()))?;
-                    println!("Plan écrit dans: {}", path.display());
-                }
-                None => println!("{plan_sql}"),
-            }
-            println!("(Aucune écriture dans {} — ce SQL n'a pas été exécuté.)", db_path.display());
+            emit_plan(&plan_sql, out, &db_path)?;
+        }
+        Command::DeletePlan { db, id, out } => {
+            let (db_path, conn) = open_readonly(&db)?;
+            let plan_sql = build_delete_plan(&conn, id)?;
+            emit_plan(&plan_sql, out, &db_path)?;
         }
         Command::Commit { db, plan } => {
             ensure_not_real_collection(&db)?;
@@ -414,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_and_commit_add_a_readable_album() {
+    fn add_edit_and_delete_round_trip() {
         let source = Path::new("testdata/MyCollection.mucp");
         if !source.exists() {
             eprintln!(
@@ -443,14 +749,16 @@ mod tests {
         let read_conn =
             Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .unwrap();
+        let fields = AlbumFields {
+            format: Some("CD".to_string()),
+            ..Default::default()
+        };
         let plan_sql = build_plan(
             &read_conn,
             "Test unitaire mc_add",
             &["Artiste de test".to_string()],
             &["Genre de test".to_string()],
-            Some("CD"),
-            None,
-            None,
+            &fields,
             &["Piste unique".to_string()],
         )
         .unwrap();
@@ -463,14 +771,70 @@ mod tests {
         let verify_conn =
             Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .unwrap();
-        let title: String = verify_conn
+        let (album_id, title): (i64, String) = verify_conn
             .query_row(
-                "SELECT ZTITLE FROM ZCOLLECTIBLE WHERE ZTITLE = 'Test unitaire mc_add'",
+                "SELECT Z_PK, ZTITLE FROM ZCOLLECTIBLE WHERE ZTITLE = 'Test unitaire mc_add'",
                 [],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .unwrap();
         assert_eq!(title, "Test unitaire mc_add");
+
+        // Edit: rename, replace the genre list.
+        let edit_sql = build_edit_plan(
+            &verify_conn,
+            album_id,
+            Some("Titre modifié"),
+            &AlbumFields::default(),
+            false,
+            &[],
+            true,
+            &["Autre genre".to_string()],
+        )
+        .unwrap();
+        drop(verify_conn);
+        let write_conn = Connection::open(&db_path).unwrap();
+        write_conn.execute_batch(&edit_sql).unwrap();
+        drop(write_conn);
+
+        let verify_conn =
+            Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        let renamed: String = verify_conn
+            .query_row(
+                "SELECT ZTITLE FROM ZCOLLECTIBLE WHERE Z_PK = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(renamed, "Titre modifié");
+        let genre_count: i64 = verify_conn
+            .query_row(
+                "SELECT COUNT(*) FROM Z_10GENRES WHERE Z_10ALBUMS2 = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(genre_count, 1);
+
+        // Delete: the album and its track should both disappear.
+        let delete_sql = build_delete_plan(&verify_conn, album_id).unwrap();
+        drop(verify_conn);
+        let write_conn = Connection::open(&db_path).unwrap();
+        write_conn.execute_batch(&delete_sql).unwrap();
+        drop(write_conn);
+
+        let verify_conn =
+            Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .unwrap();
+        let remaining: i64 = verify_conn
+            .query_row(
+                "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
 
         let _ = std::fs::remove_dir_all(&scratch);
     }

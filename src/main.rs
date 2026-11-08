@@ -236,6 +236,7 @@ fn load_collection_map(conn: &Connection) -> Result<HashMap<i64, String>> {
     Ok(map)
 }
 
+#[allow(clippy::type_complexity)]
 fn load_discs_by_album(conn: &Connection) -> Result<HashMap<i64, Vec<(i64, Option<String>)>>> {
     let mut stmt = conn.prepare(
         "SELECT ZALBUM, Z_PK, ZDISCINDEX FROM ZCOLLECTIBLE \
