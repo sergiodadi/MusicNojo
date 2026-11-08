@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
+[lib]
+name = "music_collector_export"
+path = "src/lib.rs"
+
 [[bin]]
 name = "mc_export"
 path = "src/main.rs"
