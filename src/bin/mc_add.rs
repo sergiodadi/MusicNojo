@@ -24,6 +24,9 @@ const ENT_ORCHESTRA: i64 = 42;
 const ENT_ORCHESTRA_PERSON: i64 = 43;
 const ENT_FORMAT: i64 = 27;
 const ENT_GENRE: i64 = 28;
+const ENT_TAG: i64 = 54;
+const ENT_EXTRA: i64 = 26;
+const ENT_STUDIO: i64 = 53;
 const ENT_LABEL: i64 = 32;
 const ENT_COUNTRY: i64 = 23;
 const ENT_CONDITION: i64 = 20;
@@ -225,6 +228,126 @@ fn role_spec(key: &str) -> &'static RoleSpec {
         .unwrap_or_else(|| panic!("clé de rôle inconnue: {key}"))
 }
 
+/// Genre/Tag/Extra/Studio are many-to-many via a Core Data join table
+/// (e.g. Z_10GENRES) linking the album to a simple lookup entity — same
+/// resolve-or-create as Format/Label/..., just through a join table
+/// instead of a direct column on ZCOLLECTIBLE. Mirrors mc_export's
+/// MANY_TO_MANY table.
+#[derive(clap::Args, Default)]
+struct ManyToManyInputs {
+    #[arg(long = "genre")]
+    genre: Vec<String>,
+    #[arg(long = "tag")]
+    tag: Vec<String>,
+    #[arg(long = "extra")]
+    extra: Vec<String>,
+    #[arg(long = "studio")]
+    studio: Vec<String>,
+}
+
+impl ManyToManyInputs {
+    fn pairs(&self) -> [(&'static str, &[String]); 4] {
+        [
+            ("genre", &self.genre),
+            ("tag", &self.tag),
+            ("extra", &self.extra),
+            ("studio", &self.studio),
+        ]
+    }
+
+    fn get(&self, key: &str) -> &[String] {
+        self.pairs()
+            .into_iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v)
+            .unwrap_or(&[])
+    }
+}
+
+#[derive(clap::Args, Default)]
+struct ManyToManyReplaceFlags {
+    #[arg(long)]
+    replace_genres: bool,
+    #[arg(long)]
+    replace_tags: bool,
+    #[arg(long)]
+    replace_extras: bool,
+    #[arg(long)]
+    replace_studios: bool,
+}
+
+impl ManyToManyReplaceFlags {
+    fn pairs(&self) -> [(&'static str, bool); 4] {
+        [
+            ("genre", self.replace_genres),
+            ("tag", self.replace_tags),
+            ("extra", self.replace_extras),
+            ("studio", self.replace_studios),
+        ]
+    }
+}
+
+struct ManyToManySpec {
+    key: &'static str,
+    join_table: &'static str,
+    album_col: &'static str,
+    target_col: &'static str,
+    target_table: &'static str,
+    target_entity: &'static str,
+    target_ent_id: i64,
+    back_ref: &'static str,
+}
+
+const MANY_TO_MANY_SPECS: &[ManyToManySpec] = &[
+    ManyToManySpec {
+        key: "genre",
+        join_table: "Z_10GENRES",
+        album_col: "Z_10ALBUMS2",
+        target_col: "Z_28GENRES",
+        target_table: "ZGENRE",
+        target_entity: "Genre",
+        target_ent_id: ENT_GENRE,
+        back_ref: "ZGENRE",
+    },
+    ManyToManySpec {
+        key: "tag",
+        join_table: "Z_8TAGS",
+        album_col: "Z_8COLLECTIBLES",
+        target_col: "Z_54TAGS",
+        target_table: "ZTAG",
+        target_entity: "Tag",
+        target_ent_id: ENT_TAG,
+        back_ref: "ZTAG",
+    },
+    ManyToManySpec {
+        key: "extra",
+        join_table: "Z_10EXTRAS",
+        album_col: "Z_10ALBUMS1",
+        target_col: "Z_26EXTRAS",
+        target_table: "ZEXTRA",
+        target_entity: "Extra",
+        target_ent_id: ENT_EXTRA,
+        back_ref: "ZEXTRA",
+    },
+    ManyToManySpec {
+        key: "studio",
+        join_table: "Z_10STUDIOS",
+        album_col: "Z_10ALBUMS4",
+        target_col: "Z_53STUDIOS",
+        target_table: "ZSTUDIO",
+        target_entity: "Studio",
+        target_ent_id: ENT_STUDIO,
+        back_ref: "ZSTUDIO",
+    },
+];
+
+fn many_to_many_spec(key: &str) -> &'static ManyToManySpec {
+    MANY_TO_MANY_SPECS
+        .iter()
+        .find(|s| s.key == key)
+        .unwrap_or_else(|| panic!("clé many-to-many inconnue: {key}"))
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Compute the SQL to insert a new album, without writing anything
@@ -236,8 +359,8 @@ enum Command {
         title: String,
         #[command(flatten)]
         roles: RoleInputs,
-        #[arg(long = "genre")]
-        genres: Vec<String>,
+        #[command(flatten)]
+        many: ManyToManyInputs,
         #[command(flatten)]
         fields: AlbumFields,
         /// One track title per occurrence, in order
@@ -262,11 +385,10 @@ enum Command {
         replace: RoleReplaceFlags,
         #[command(flatten)]
         roles: RoleInputs,
-        /// Replace the genre list (even with zero --genre, which clears it)
-        #[arg(long)]
-        replace_genres: bool,
-        #[arg(long = "genre")]
-        genres: Vec<String>,
+        #[command(flatten)]
+        replace_many: ManyToManyReplaceFlags,
+        #[command(flatten)]
+        many: ManyToManyInputs,
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -480,6 +602,37 @@ fn add_role_rows(
     Ok(())
 }
 
+/// Resolves-or-creates each named lookup for one many-to-many field
+/// (Genre/Tag/Extra/Studio), and plans the join-table row for each.
+fn add_many_to_many_rows(
+    conn: &Connection,
+    pks: &mut PkAllocator,
+    sql: &mut Vec<String>,
+    spec: &ManyToManySpec,
+    album_id: i64,
+    names: &[String],
+) -> Result<()> {
+    for name in names {
+        let target_id = resolve_or_create_simple_lookup(
+            conn,
+            pks,
+            sql,
+            spec.target_table,
+            spec.target_entity,
+            spec.target_ent_id,
+            spec.back_ref,
+            name,
+        )?;
+        sql.push(format!(
+            "INSERT INTO {join_table} ({album_col}, {target_col}) VALUES ({album_id}, {target_id});",
+            join_table = spec.join_table,
+            album_col = spec.album_col,
+            target_col = spec.target_col,
+        ));
+    }
+    Ok(())
+}
+
 // (field_name_in_struct_access, column, entity_name, ent_id, back_ref_column)
 // handled via a small helper below instead of a table, since each lookup
 // has a differently-named accessor on AlbumFields.
@@ -534,7 +687,7 @@ fn build_plan(
     conn: &Connection,
     title: &str,
     roles: &RoleInputs,
-    genres: &[String],
+    many: &ManyToManyInputs,
     fields: &AlbumFields,
     tracks: &[String],
 ) -> Result<String> {
@@ -592,13 +745,17 @@ fn build_plan(
         }
     }
 
-    for genre_name in genres {
-        let genre_id = resolve_or_create_simple_lookup(
-            conn, &mut pks, &mut sql, "ZGENRE", "Genre", ENT_GENRE, "ZGENRE", genre_name,
-        )?;
-        sql.push(format!(
-            "INSERT INTO Z_10GENRES (Z_10ALBUMS2, Z_28GENRES) VALUES ({album_id}, {genre_id});"
-        ));
+    for (key, names) in many.pairs() {
+        if !names.is_empty() {
+            add_many_to_many_rows(
+                conn,
+                &mut pks,
+                &mut sql,
+                many_to_many_spec(key),
+                album_id,
+                names,
+            )?;
+        }
     }
 
     if !tracks.is_empty() {
@@ -631,8 +788,8 @@ fn build_edit_plan(
     fields: &AlbumFields,
     replace: &RoleReplaceFlags,
     roles: &RoleInputs,
-    replace_genres: bool,
-    genres: &[String],
+    replace_many: &ManyToManyReplaceFlags,
+    many: &ManyToManyInputs,
 ) -> Result<String> {
     let exists: i64 = conn.query_row(
         "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
@@ -687,17 +844,14 @@ fn build_edit_plan(
         }
     }
 
-    if replace_genres {
-        sql.push(format!(
-            "DELETE FROM Z_10GENRES WHERE Z_10ALBUMS2 = {album_id};"
-        ));
-        for genre_name in genres {
-            let genre_id = resolve_or_create_simple_lookup(
-                conn, &mut pks, &mut sql, "ZGENRE", "Genre", ENT_GENRE, "ZGENRE", genre_name,
-            )?;
+    for (key, do_replace) in replace_many.pairs() {
+        if do_replace {
+            let spec = many_to_many_spec(key);
             sql.push(format!(
-                "INSERT INTO Z_10GENRES (Z_10ALBUMS2, Z_28GENRES) VALUES ({album_id}, {genre_id});"
+                "DELETE FROM {} WHERE {} = {album_id};",
+                spec.join_table, spec.album_col
             ));
+            add_many_to_many_rows(conn, &mut pks, &mut sql, spec, album_id, many.get(key))?;
         }
     }
 
@@ -796,13 +950,13 @@ fn main() -> Result<()> {
             db,
             title,
             roles,
-            genres,
+            many,
             fields,
             tracks,
             out,
         } => {
             let (db_path, conn) = open_readonly(&db)?;
-            let plan_sql = build_plan(&conn, &title, &roles, &genres, &fields, &tracks)?;
+            let plan_sql = build_plan(&conn, &title, &roles, &many, &fields, &tracks)?;
             emit_plan(&plan_sql, out, &db_path)?;
         }
         Command::EditPlan {
@@ -812,8 +966,8 @@ fn main() -> Result<()> {
             fields,
             replace,
             roles,
-            replace_genres,
-            genres,
+            replace_many,
+            many,
             out,
         } => {
             let (db_path, conn) = open_readonly(&db)?;
@@ -824,8 +978,8 @@ fn main() -> Result<()> {
                 &fields,
                 &replace,
                 &roles,
-                replace_genres,
-                &genres,
+                &replace_many,
+                &many,
             )?;
             emit_plan(&plan_sql, out, &db_path)?;
         }
@@ -930,11 +1084,16 @@ mod tests {
             composer: vec!["Compositeur de test".to_string()],
             ..Default::default()
         };
+        let many = ManyToManyInputs {
+            genre: vec!["Genre de test".to_string()],
+            tag: vec!["Tag de test".to_string()],
+            ..Default::default()
+        };
         let plan_sql = build_plan(
             &read_conn,
             "Test unitaire mc_add",
             &roles,
-            &["Genre de test".to_string()],
+            &many,
             &fields,
             &["Piste unique".to_string()],
         )
@@ -964,8 +1123,16 @@ mod tests {
             )
             .unwrap();
         assert_eq!(composer_count, 1);
+        let tag_count: i64 = verify_conn
+            .query_row(
+                "SELECT COUNT(*) FROM Z_8TAGS WHERE Z_8COLLECTIBLES = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tag_count, 1);
 
-        // Edit: rename, replace the genre list AND the composer list.
+        // Edit: rename, replace the genre/composer/tag lists.
         let edit_sql = build_edit_plan(
             &verify_conn,
             album_id,
@@ -979,8 +1146,16 @@ mod tests {
                 composer: vec!["Autre compositeur".to_string()],
                 ..Default::default()
             },
-            true,
-            &["Autre genre".to_string()],
+            &ManyToManyReplaceFlags {
+                replace_genres: true,
+                replace_tags: true,
+                ..Default::default()
+            },
+            &ManyToManyInputs {
+                genre: vec!["Autre genre".to_string()],
+                tag: vec![],
+                ..Default::default()
+            },
         )
         .unwrap();
         drop(verify_conn);
@@ -1007,6 +1182,14 @@ mod tests {
             )
             .unwrap();
         assert_eq!(genre_count, 1);
+        let tag_count_after: i64 = verify_conn
+            .query_row(
+                "SELECT COUNT(*) FROM Z_8TAGS WHERE Z_8COLLECTIBLES = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(tag_count_after, 0);
         let new_composer_name: String = verify_conn
             .query_row(
                 "SELECT p.ZDISPLAYNAME FROM ZCOMPOSER c \
