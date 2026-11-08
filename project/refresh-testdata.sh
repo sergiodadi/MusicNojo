@@ -7,7 +7,10 @@ set -eu
 SOURCE="$HOME/Documents/Collectorz/Music Collector/MyCollection.mucp"
 DEST="$(dirname "$0")/testdata/MyCollection.mucp"
 
-rm -rf "$DEST"
+if [ -e "$DEST" ]; then
+  find "$DEST" -type d -exec chmod 755 {} +
+  rm -rf "$DEST"
+fi
 mkdir -p "$(dirname "$DEST")"
 cp -R "$SOURCE" "$DEST"
 find "$DEST" -type d -exec chmod 555 {} +
