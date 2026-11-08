@@ -1,0 +1,30 @@
+[package]
+name = "musicnojo"
+version = "0.1.0"
+description = "MusicNojo"
+authors = ["Serge"]
+license = "MIT"
+edition = "2024"
+rust-version = "1.90"
+
+[lib]
+name = "musicnojo_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.12.5", features = [] }
+# The CLI tools' shared library (../../src/lib.rs) — reused as-is for
+# reading a collection, rather than duplicating the joins/queries.
+music_collector_export = { path = "../.." }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

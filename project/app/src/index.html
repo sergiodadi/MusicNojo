@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MusicNojo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>MusicNojo</h1>
+    <input id="search" type="search" placeholder="Search by title or artist…" autofocus />
+    <span id="count"></span>
+  </header>
+  <table id="albums">
+    <thead>
+      <tr>
+        <th data-k="title">Title</th>
+        <th data-k="artists">Artist(s)</th>
+        <th data-k="genres">Genre(s)</th>
+        <th data-k="format">Format</th>
+        <th data-k="release_year">Year</th>
+        <th data-k="track_count">Tracks</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
