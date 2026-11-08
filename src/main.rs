@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -29,7 +30,7 @@ struct Args {
     json: Option<PathBuf>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Track {
     position: Option<i64>,
     title: String,
@@ -42,7 +43,7 @@ struct Disc {
     tracks: Vec<Track>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Credit {
     name: String,
     // ZCREDIT.ZROLEID: no corresponding label exists anywhere in
@@ -88,130 +89,267 @@ struct Album {
     discs: Vec<Disc>,
 }
 
-fn resolve_simple_lookup(conn: &Connection, table: &str, pk: i64) -> Result<Option<String>> {
-    let sql = format!(
-        "SELECT l.ZDISPLAYNAME FROM {table} t \
-         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE \
-         WHERE t.Z_PK = ?1"
-    );
-    let mut stmt = conn.prepare(&sql)?;
-    let name: Option<String> = stmt.query_row([pk], |row| row.get(0)).ok();
-    Ok(name)
+/// Bulk-loaded lookups, keyed so that assembling each album is a set of
+/// in-memory map lookups instead of running fresh SQL per album (the
+/// previous version ran ~20 small queries per album — ~45,000 total for
+/// a 2300-album collection; this version runs one query per lookup kind).
+struct Lookups {
+    simple: HashMap<&'static str, HashMap<i64, String>>,
+    collections: HashMap<i64, String>,
+    roles: HashMap<&'static str, HashMap<i64, Vec<String>>>,
+    credits: HashMap<i64, Vec<Credit>>,
+    many_to_many: HashMap<&'static str, HashMap<i64, Vec<String>>>,
+    discs_by_album: HashMap<i64, Vec<(i64, Option<String>)>>,
+    tracks_by_disc: HashMap<i64, Vec<Track>>,
 }
 
-// Artist/Composer/Conductor/Musician/Orchestra/Chorus each have their own
-// dedicated entity + person-delegate pair (unlike the generic Credit
-// entity below), so none of these roles need an id-to-label mapping.
-fn load_role_names(
+const SIMPLE_LOOKUPS: &[&str] = &[
+    "ZFORMAT",
+    "ZCOUNTRY",
+    "ZLABEL",
+    "ZCONDITION",
+    "ZPACKAGING",
+    "ZVINYLCOLOR",
+    "ZSPARS",
+    "ZOWNER",
+    "ZLOCATION",
+];
+
+// (role_table, person_table, person_fk) — the person_fk column name
+// always matches the person_table name in this schema.
+const ROLE_TABLES: &[(&str, &str, &str)] = &[
+    ("ZARTIST", "ZARTISTPERSON", "ZARTISTPERSON"),
+    ("ZCOMPOSER", "ZCOMPOSERPERSON", "ZCOMPOSERPERSON"),
+    ("ZCONDUCTOR", "ZCONDUCTORPERSON", "ZCONDUCTORPERSON"),
+    ("ZMUSICIAN", "ZMUSICIANPERSON", "ZMUSICIANPERSON"),
+    ("ZORCHESTRA", "ZORCHESTRAPERSON", "ZORCHESTRAPERSON"),
+    ("ZCHORUS", "ZCHORUSPERSON", "ZCHORUSPERSON"),
+];
+
+// (name, join_table, album_col, target_col, target_table)
+const MANY_TO_MANY: &[(&str, &str, &str, &str, &str)] = &[
+    ("genres", "Z_10GENRES", "Z_10ALBUMS2", "Z_28GENRES", "ZGENRE"),
+    ("tags", "Z_8TAGS", "Z_8COLLECTIBLES", "Z_54TAGS", "ZTAG"),
+    ("extras", "Z_10EXTRAS", "Z_10ALBUMS1", "Z_26EXTRAS", "ZEXTRA"),
+    (
+        "studios",
+        "Z_10STUDIOS",
+        "Z_10ALBUMS4",
+        "Z_53STUDIOS",
+        "ZSTUDIO",
+    ),
+];
+
+fn group_by<K: std::hash::Hash + Eq, V>(pairs: Vec<(K, V)>) -> HashMap<K, Vec<V>> {
+    let mut map: HashMap<K, Vec<V>> = HashMap::new();
+    for (k, v) in pairs {
+        map.entry(k).or_default().push(v);
+    }
+    map
+}
+
+fn load_simple_lookup_map(conn: &Connection, table: &str) -> Result<HashMap<i64, String>> {
+    let sql = format!(
+        "SELECT t.Z_PK, l.ZDISPLAYNAME FROM {table} t \
+         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let map = stmt
+        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(map)
+}
+
+fn load_role_map(
     conn: &Connection,
     role_table: &str,
     person_table: &str,
     person_fk: &str,
-    album_pk: i64,
-) -> Result<Vec<String>> {
+) -> Result<HashMap<i64, Vec<String>>> {
     let sql = format!(
-        "SELECT p.ZDISPLAYNAME FROM {role_table} r \
+        "SELECT r.ZALBUM, p.ZDISPLAYNAME FROM {role_table} r \
          JOIN {person_table} pt ON pt.Z_PK = r.{person_fk} \
          JOIN ZPERSONDELEGATE p ON p.Z_PK = pt.ZDELEGATE \
-         WHERE r.ZALBUM = ?1 ORDER BY r.ZRANK"
+         WHERE r.ZALBUM IS NOT NULL ORDER BY r.ZALBUM, r.ZRANK"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let names = stmt
-        .query_map([album_pk], |row| row.get::<_, String>(0))?
+    let pairs: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .filter_map(|r| r.ok())
         .collect();
-    Ok(names)
+    Ok(group_by(pairs))
 }
 
-fn load_credits(conn: &Connection, album_pk: i64) -> Result<Vec<Credit>> {
+fn load_credit_map(conn: &Connection) -> Result<HashMap<i64, Vec<Credit>>> {
     let mut stmt = conn.prepare(
-        "SELECT p.ZDISPLAYNAME, c.ZROLEID FROM ZCREDIT c \
+        "SELECT c.ZALBUM, p.ZDISPLAYNAME, c.ZROLEID FROM ZCREDIT c \
          JOIN ZCREDITPERSON cp ON cp.Z_PK = c.ZCREDITPERSON \
          JOIN ZPERSONDELEGATE p ON p.Z_PK = cp.ZDELEGATE \
-         WHERE c.ZALBUM = ?1 ORDER BY c.ZRANK",
+         WHERE c.ZALBUM IS NOT NULL ORDER BY c.ZALBUM, c.ZRANK",
     )?;
-    let credits = stmt
-        .query_map([album_pk], |row| {
-            Ok(Credit {
-                name: row.get(0)?,
-                role_id: row.get(1)?,
-            })
+    let pairs: Vec<(i64, Credit)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                Credit {
+                    name: row.get(1)?,
+                    role_id: row.get(2)?,
+                },
+            ))
         })?
         .filter_map(|r| r.ok())
         .collect();
-    Ok(credits)
+    Ok(group_by(pairs))
 }
 
-// Many-to-many fields (Genre/Tag/Extra/Studio) go through a Core Data
-// join table (e.g. Z_10GENRES) linking the album to a lookup entity,
-// which then resolves through ZLOOKUPITEMDELEGATE like a simple lookup.
-fn load_many_to_many(
+fn load_many_to_many_map(
     conn: &Connection,
     join_table: &str,
     album_col: &str,
     target_col: &str,
     target_table: &str,
-    album_pk: i64,
-) -> Result<Vec<String>> {
+) -> Result<HashMap<i64, Vec<String>>> {
     let sql = format!(
-        "SELECT l.ZDISPLAYNAME FROM {join_table} j \
+        "SELECT j.{album_col}, l.ZDISPLAYNAME FROM {join_table} j \
          JOIN {target_table} t ON t.Z_PK = j.{target_col} \
-         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE \
-         WHERE j.{album_col} = ?1"
+         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let names = stmt
-        .query_map([album_pk], |row| row.get::<_, String>(0))?
+    let pairs: Vec<(i64, String)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
         .filter_map(|r| r.ok())
         .collect();
-    Ok(names)
+    Ok(group_by(pairs))
 }
 
-fn load_collection_name(conn: &Connection, collection_pk: i64) -> Result<Option<String>> {
-    let mut stmt = conn.prepare("SELECT ZTITLE FROM ZCOLLECTION WHERE Z_PK = ?1")?;
-    Ok(stmt.query_row([collection_pk], |row| row.get(0)).ok())
+fn load_collection_map(conn: &Connection) -> Result<HashMap<i64, String>> {
+    let mut stmt = conn.prepare("SELECT Z_PK, ZTITLE FROM ZCOLLECTION")?;
+    let map = stmt
+        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(map)
 }
 
-fn load_discs(conn: &Connection, album_pk: i64) -> Result<Vec<Disc>> {
-    let mut disc_stmt = conn.prepare(
-        "SELECT Z_PK, ZDISCINDEX FROM ZCOLLECTIBLE \
-         WHERE Z_ENT = ?1 AND ZALBUM = ?2 ORDER BY ZDISCINDEX",
+fn load_discs_by_album(conn: &Connection) -> Result<HashMap<i64, Vec<(i64, Option<String>)>>> {
+    let mut stmt = conn.prepare(
+        "SELECT ZALBUM, Z_PK, ZDISCINDEX FROM ZCOLLECTIBLE \
+         WHERE Z_ENT = ?1 ORDER BY ZALBUM, ZDISCINDEX",
     )?;
-    let discs_raw: Vec<(i64, Option<String>)> = disc_stmt
-        .query_map([ENT_DISC, album_pk], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?))
+    let pairs: Vec<(i64, (i64, Option<String>))> = stmt
+        .query_map([ENT_DISC], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                (row.get::<_, i64>(1)?, row.get::<_, Option<String>>(2)?),
+            ))
         })?
         .filter_map(|r| r.ok())
         .collect();
+    Ok(group_by(pairs))
+}
 
-    let mut track_stmt = conn.prepare(
-        "SELECT ZPOSITION, ZTITLE, ZLENGTHMINS, ZLENGTHSECS FROM ZCOLLECTIBLE \
-         WHERE Z_ENT = ?1 AND ZDISC1 = ?2 ORDER BY ZPOSITION",
+fn load_tracks_by_disc(conn: &Connection) -> Result<HashMap<i64, Vec<Track>>> {
+    let mut stmt = conn.prepare(
+        "SELECT ZDISC1, ZPOSITION, ZTITLE, ZLENGTHMINS, ZLENGTHSECS FROM ZCOLLECTIBLE \
+         WHERE Z_ENT = ?1 ORDER BY ZDISC1, ZPOSITION",
     )?;
-
-    let mut discs = Vec::new();
-    for (disc_pk, index) in discs_raw {
-        let tracks = track_stmt
-            .query_map([ENT_TRACK, disc_pk], |row| {
-                let position: Option<i64> = row.get(0)?;
-                let title: String = row.get::<_, Option<String>>(1)?.unwrap_or_default();
-                let mins: Option<String> = row.get(2)?;
-                let secs: Option<String> = row.get(3)?;
-                let length = match (mins, secs) {
-                    (Some(m), Some(s)) if !m.is_empty() || !s.is_empty() => Some(format!("{m}:{s}")),
-                    _ => None,
-                };
-                Ok(Track {
+    let pairs: Vec<(i64, Track)> = stmt
+        .query_map([ENT_TRACK], |row| {
+            let disc_pk: i64 = row.get(0)?;
+            let position: Option<i64> = row.get(1)?;
+            let title: String = row.get::<_, Option<String>>(2)?.unwrap_or_default();
+            let mins: Option<String> = row.get(3)?;
+            let secs: Option<String> = row.get(4)?;
+            let length = match (mins, secs) {
+                (Some(m), Some(s)) if !m.is_empty() || !s.is_empty() => Some(format!("{m}:{s}")),
+                _ => None,
+            };
+            Ok((
+                disc_pk,
+                Track {
                     position,
                     title,
                     length,
-                })
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
-        discs.push(Disc { index, tracks });
+                },
+            ))
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(group_by(pairs))
+}
+
+fn load_lookups(conn: &Connection) -> Result<Lookups> {
+    let mut simple = HashMap::new();
+    for table in SIMPLE_LOOKUPS {
+        simple.insert(*table, load_simple_lookup_map(conn, table)?);
     }
-    Ok(discs)
+
+    let mut roles = HashMap::new();
+    for (role_table, person_table, person_fk) in ROLE_TABLES {
+        roles.insert(
+            *role_table,
+            load_role_map(conn, role_table, person_table, person_fk)?,
+        );
+    }
+
+    let mut many_to_many = HashMap::new();
+    for (name, join_table, album_col, target_col, target_table) in MANY_TO_MANY {
+        let mut map = load_many_to_many_map(conn, join_table, album_col, target_col, target_table)?;
+        // Join-table order isn't meaningful (these are sets, not ranked
+        // lists like the role tables) — sort for deterministic output.
+        for names in map.values_mut() {
+            names.sort();
+        }
+        many_to_many.insert(*name, map);
+    }
+
+    Ok(Lookups {
+        simple,
+        collections: load_collection_map(conn)?,
+        roles,
+        credits: load_credit_map(conn)?,
+        many_to_many,
+        discs_by_album: load_discs_by_album(conn)?,
+        tracks_by_disc: load_tracks_by_disc(conn)?,
+    })
+}
+
+impl Lookups {
+    fn simple(&self, table: &str, pk: Option<i64>) -> Option<String> {
+        pk.and_then(|pk| self.simple.get(table).and_then(|m| m.get(&pk)).cloned())
+    }
+
+    fn role(&self, table: &str, album_pk: i64) -> Vec<String> {
+        self.roles
+            .get(table)
+            .and_then(|m| m.get(&album_pk))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn many(&self, name: &str, album_pk: i64) -> Vec<String> {
+        self.many_to_many
+            .get(name)
+            .and_then(|m| m.get(&album_pk))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn discs(&self, album_pk: i64) -> Vec<Disc> {
+        self.discs_by_album
+            .get(&album_pk)
+            .map(|discs| {
+                discs
+                    .iter()
+                    .map(|(disc_pk, index)| Disc {
+                        index: index.clone(),
+                        tracks: self.tracks_by_disc.get(disc_pk).cloned().unwrap_or_default(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 struct AlbumRow {
@@ -239,6 +377,8 @@ struct AlbumRow {
 }
 
 fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
+    let lookups = load_lookups(conn)?;
+
     let mut stmt = conn.prepare(
         "SELECT Z_PK, ZTITLE, ZFORMAT, ZCOUNTRY, ZLABEL, ZCONDITION, ZPACKAGING, \
                 ZVINYLCOLOR, ZSPARS, ZOWNER, ZLOCATION, ZCOLLECTION, ZRELEASEYEAR, \
@@ -301,86 +441,30 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             track_count,
         } = row;
 
-        let resolve = |table: &str, pk: Option<i64>| -> Result<Option<String>> {
-            pk.map(|pk| resolve_simple_lookup(conn, table, pk))
-                .transpose()
-                .map(|o| o.flatten())
-        };
-        let format = resolve("ZFORMAT", format_pk)?;
-        let country = resolve("ZCOUNTRY", country_pk)?;
-        let label = resolve("ZLABEL", label_pk)?;
-        let condition = resolve("ZCONDITION", condition_pk)?;
-        let packaging = resolve("ZPACKAGING", packaging_pk)?;
-        let vinyl_color = resolve("ZVINYLCOLOR", vinyl_color_pk)?;
-        let spars = resolve("ZSPARS", spars_pk)?;
-        let owner = resolve("ZOWNER", owner_pk)?;
-        let location = resolve("ZLOCATION", location_pk)?;
-        let collection = collection_pk
-            .map(|pk| load_collection_name(conn, pk))
-            .transpose()?
-            .flatten();
-
-        let tags = load_many_to_many(conn, "Z_8TAGS", "Z_8COLLECTIBLES", "Z_54TAGS", "ZTAG", id)?;
-        let extras =
-            load_many_to_many(conn, "Z_10EXTRAS", "Z_10ALBUMS1", "Z_26EXTRAS", "ZEXTRA", id)?;
-        let studios = load_many_to_many(
-            conn,
-            "Z_10STUDIOS",
-            "Z_10ALBUMS4",
-            "Z_53STUDIOS",
-            "ZSTUDIO",
-            id,
-        )?;
-        let genres =
-            load_many_to_many(conn, "Z_10GENRES", "Z_10ALBUMS2", "Z_28GENRES", "ZGENRE", id)?;
-
-        let artists = load_role_names(conn, "ZARTIST", "ZARTISTPERSON", "ZARTISTPERSON", id)?;
-        let composers =
-            load_role_names(conn, "ZCOMPOSER", "ZCOMPOSERPERSON", "ZCOMPOSERPERSON", id)?;
-        let conductors = load_role_names(
-            conn,
-            "ZCONDUCTOR",
-            "ZCONDUCTORPERSON",
-            "ZCONDUCTORPERSON",
-            id,
-        )?;
-        let musicians =
-            load_role_names(conn, "ZMUSICIAN", "ZMUSICIANPERSON", "ZMUSICIANPERSON", id)?;
-        let orchestras = load_role_names(
-            conn,
-            "ZORCHESTRA",
-            "ZORCHESTRAPERSON",
-            "ZORCHESTRAPERSON",
-            id,
-        )?;
-        let choruses = load_role_names(conn, "ZCHORUS", "ZCHORUSPERSON", "ZCHORUSPERSON", id)?;
-        let credits = load_credits(conn, id)?;
-        let discs = load_discs(conn, id)?;
-
         albums.push(Album {
             id,
             title,
-            artists,
-            composers,
-            conductors,
-            musicians,
-            orchestras,
-            choruses,
-            credits,
-            genres,
-            tags,
-            extras,
-            studios,
-            label,
-            format,
-            country,
-            condition,
-            packaging,
-            vinyl_color,
-            spars,
-            owner,
-            location,
-            collection,
+            artists: lookups.role("ZARTIST", id),
+            composers: lookups.role("ZCOMPOSER", id),
+            conductors: lookups.role("ZCONDUCTOR", id),
+            musicians: lookups.role("ZMUSICIAN", id),
+            orchestras: lookups.role("ZORCHESTRA", id),
+            choruses: lookups.role("ZCHORUS", id),
+            credits: lookups.credits.get(&id).cloned().unwrap_or_default(),
+            genres: lookups.many("genres", id),
+            tags: lookups.many("tags", id),
+            extras: lookups.many("extras", id),
+            studios: lookups.many("studios", id),
+            label: lookups.simple("ZLABEL", label_pk),
+            format: lookups.simple("ZFORMAT", format_pk),
+            country: lookups.simple("ZCOUNTRY", country_pk),
+            condition: lookups.simple("ZCONDITION", condition_pk),
+            packaging: lookups.simple("ZPACKAGING", packaging_pk),
+            vinyl_color: lookups.simple("ZVINYLCOLOR", vinyl_color_pk),
+            spars: lookups.simple("ZSPARS", spars_pk),
+            owner: lookups.simple("ZOWNER", owner_pk),
+            location: lookups.simple("ZLOCATION", location_pk),
+            collection: collection_pk.and_then(|pk| lookups.collections.get(&pk).cloned()),
             release_year,
             rating,
             notes,
@@ -390,7 +474,7 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             thumbnail,
             backdrop,
             track_count,
-            discs,
+            discs: lookups.discs(id),
         });
     }
     Ok(albums)
