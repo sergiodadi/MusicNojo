@@ -28,6 +28,10 @@ struct Args {
     /// Write the full nested collection (albums/discs/tracks) to this JSON file
     #[arg(long)]
     json: Option<PathBuf>,
+
+    /// Write a standalone, searchable HTML page to this file
+    #[arg(long)]
+    html: Option<PathBuf>,
 }
 
 #[derive(Serialize, Clone)]
@@ -480,6 +484,106 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
     Ok(albums)
 }
 
+fn write_html(path: &PathBuf, albums: &[Album]) -> Result<()> {
+    #[derive(Serialize)]
+    struct Row<'a> {
+        title: &'a str,
+        artists: String,
+        genres: String,
+        format: &'a str,
+        country: &'a str,
+        release_year: &'a str,
+        track_count: i64,
+    }
+
+    let rows: Vec<Row> = albums
+        .iter()
+        .map(|a| Row {
+            title: &a.title,
+            artists: a.artists.join(", "),
+            genres: a.genres.join(", "),
+            format: a.format.as_deref().unwrap_or(""),
+            country: a.country.as_deref().unwrap_or(""),
+            release_year: a.release_year.as_deref().unwrap_or(""),
+            track_count: a.track_count,
+        })
+        .collect();
+    // Escaped so a title/artist containing "</script>" can't break out of
+    // the embedding <script> tag.
+    let data_json = serde_json::to_string(&rows)?.replace("</", "<\\/");
+
+    let html = format!(
+        r##"<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MusicNojo — Collection</title>
+<style>
+  body {{ font-family: -apple-system, system-ui, sans-serif; margin: 2rem; color: #222; }}
+  h1 {{ font-size: 1.3rem; }}
+  input {{ font-size: 1rem; padding: 0.4rem; width: 100%; max-width: 24rem; margin-bottom: 1rem; }}
+  table {{ border-collapse: collapse; width: 100%; }}
+  th, td {{ text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #ddd; }}
+  th {{ cursor: pointer; user-select: none; position: sticky; top: 0; background: #fafafa; }}
+  #count {{ color: #666; font-size: 0.9rem; margin-bottom: 0.5rem; }}
+</style>
+</head>
+<body>
+<h1>MusicNojo — Collection ({count} albums)</h1>
+<input id="search" type="search" placeholder="Rechercher par titre ou artiste…" autofocus>
+<div id="count"></div>
+<table id="t">
+<thead><tr>
+  <th data-k="title">Titre</th>
+  <th data-k="artists">Artiste(s)</th>
+  <th data-k="genres">Genre(s)</th>
+  <th data-k="format">Format</th>
+  <th data-k="country">Pays</th>
+  <th data-k="release_year">Année</th>
+  <th data-k="track_count">Pistes</th>
+</tr></thead>
+<tbody></tbody>
+</table>
+<script>
+const ALBUMS = {data_json};
+let sortKey = "title", sortAsc = true;
+
+function render(filterText) {{
+  const needle = filterText.trim().toLowerCase();
+  let rows = ALBUMS.filter(a =>
+    !needle || a.title.toLowerCase().includes(needle) || a.artists.toLowerCase().includes(needle)
+  );
+  rows.sort((a, b) => {{
+    const va = a[sortKey], vb = b[sortKey];
+    const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
+    return sortAsc ? cmp : -cmp;
+  }});
+  document.getElementById("count").textContent = rows.length + " résultat(s)";
+  const body = document.querySelector("#t tbody");
+  body.innerHTML = rows.map(a => `<tr>
+    <td>${{a.title}}</td><td>${{a.artists}}</td><td>${{a.genres}}</td>
+    <td>${{a.format}}</td><td>${{a.country}}</td><td>${{a.release_year}}</td><td>${{a.track_count}}</td>
+  </tr>`).join("");
+}}
+
+document.getElementById("search").addEventListener("input", e => render(e.target.value));
+document.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {{
+  const k = th.dataset.k;
+  sortAsc = (sortKey === k) ? !sortAsc : true;
+  sortKey = k;
+  render(document.getElementById("search").value);
+}}));
+render("");
+</script>
+</body>
+</html>
+"##,
+        count = albums.len(),
+    );
+    std::fs::write(path, html).with_context(|| format!("écriture de {}", path.display()))?;
+    Ok(())
+}
+
 fn write_csv(path: &PathBuf, albums: &[Album]) -> Result<()> {
     let mut writer = csv::Writer::from_path(path)?;
     writer.write_record([
@@ -595,6 +699,10 @@ fn main() -> Result<()> {
             .with_context(|| format!("écriture de {}", json_path.display()))?;
         serde_json::to_writer_pretty(file, &albums)?;
         println!("JSON écrit dans: {}", json_path.display());
+    }
+    if let Some(html_path) = &args.html {
+        write_html(html_path, &albums)?;
+        println!("HTML écrit dans: {}", html_path.display());
     }
 
     Ok(())
