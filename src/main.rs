@@ -63,6 +63,9 @@ struct Album {
     choruses: Vec<String>,
     credits: Vec<Credit>,
     genres: Vec<String>,
+    tags: Vec<String>,
+    extras: Vec<String>,
+    studios: Vec<String>,
     label: Option<String>,
     format: Option<String>,
     country: Option<String>,
@@ -70,10 +73,17 @@ struct Album {
     packaging: Option<String>,
     vinyl_color: Option<String>,
     spars: Option<String>,
+    owner: Option<String>,
+    location: Option<String>,
+    collection: Option<String>,
     release_year: Option<String>,
     rating: Option<i64>,
     notes: Option<String>,
     upc: Option<String>,
+    front_cover: Option<String>,
+    back_cover: Option<String>,
+    thumbnail: Option<String>,
+    backdrop: Option<String>,
     track_count: i64,
     discs: Vec<Disc>,
 }
@@ -132,18 +142,34 @@ fn load_credits(conn: &Connection, album_pk: i64) -> Result<Vec<Credit>> {
     Ok(credits)
 }
 
-fn load_genres(conn: &Connection, album_pk: i64) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT l.ZDISPLAYNAME FROM Z_10GENRES j \
-         JOIN ZGENRE g ON g.Z_PK = j.Z_28GENRES \
-         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = g.ZDELEGATE \
-         WHERE j.Z_10ALBUMS2 = ?1",
-    )?;
+// Many-to-many fields (Genre/Tag/Extra/Studio) go through a Core Data
+// join table (e.g. Z_10GENRES) linking the album to a lookup entity,
+// which then resolves through ZLOOKUPITEMDELEGATE like a simple lookup.
+fn load_many_to_many(
+    conn: &Connection,
+    join_table: &str,
+    album_col: &str,
+    target_col: &str,
+    target_table: &str,
+    album_pk: i64,
+) -> Result<Vec<String>> {
+    let sql = format!(
+        "SELECT l.ZDISPLAYNAME FROM {join_table} j \
+         JOIN {target_table} t ON t.Z_PK = j.{target_col} \
+         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE \
+         WHERE j.{album_col} = ?1"
+    );
+    let mut stmt = conn.prepare(&sql)?;
     let names = stmt
         .query_map([album_pk], |row| row.get::<_, String>(0))?
         .filter_map(|r| r.ok())
         .collect();
     Ok(names)
+}
+
+fn load_collection_name(conn: &Connection, collection_pk: i64) -> Result<Option<String>> {
+    let mut stmt = conn.prepare("SELECT ZTITLE FROM ZCOLLECTION WHERE Z_PK = ?1")?;
+    Ok(stmt.query_row([collection_pk], |row| row.get(0)).ok())
 }
 
 fn load_discs(conn: &Connection, album_pk: i64) -> Result<Vec<Disc>> {
@@ -188,68 +214,93 @@ fn load_discs(conn: &Connection, album_pk: i64) -> Result<Vec<Disc>> {
     Ok(discs)
 }
 
-#[allow(clippy::type_complexity)]
+struct AlbumRow {
+    id: i64,
+    title: String,
+    format_pk: Option<i64>,
+    country_pk: Option<i64>,
+    label_pk: Option<i64>,
+    condition_pk: Option<i64>,
+    packaging_pk: Option<i64>,
+    vinyl_color_pk: Option<i64>,
+    spars_pk: Option<i64>,
+    owner_pk: Option<i64>,
+    location_pk: Option<i64>,
+    collection_pk: Option<i64>,
+    release_year: Option<String>,
+    rating: Option<i64>,
+    notes: Option<String>,
+    upc: Option<String>,
+    front_cover: Option<String>,
+    back_cover: Option<String>,
+    thumbnail: Option<String>,
+    backdrop: Option<String>,
+    track_count: i64,
+}
+
 fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
     let mut stmt = conn.prepare(
         "SELECT Z_PK, ZTITLE, ZFORMAT, ZCOUNTRY, ZLABEL, ZCONDITION, ZPACKAGING, \
-                ZVINYLCOLOR, ZSPARS, ZRELEASEYEAR, ZMYRATING, ZNOTES, ZUPC, ZNRTRACKS \
+                ZVINYLCOLOR, ZSPARS, ZOWNER, ZLOCATION, ZCOLLECTION, ZRELEASEYEAR, \
+                ZMYRATING, ZNOTES, ZUPC, ZFRONTCOVER, ZBACKCOVER, ZTHUMBFILEPATH, \
+                ZBACKDROP, ZNRTRACKS \
          FROM ZCOLLECTIBLE WHERE Z_ENT = ?1 ORDER BY Z_PK",
     )?;
-    let rows: Vec<(
-        i64,
-        String,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<i64>,
-        Option<String>,
-        Option<i64>,
-        Option<String>,
-        Option<String>,
-        i64,
-    )> = stmt
+    let rows: Vec<AlbumRow> = stmt
         .query_map([ENT_ALBUM], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-                row.get(6)?,
-                row.get(7)?,
-                row.get(8)?,
-                row.get(9)?,
-                row.get(10)?,
-                row.get(11)?,
-                row.get(12)?,
-                row.get(13)?,
-            ))
+            Ok(AlbumRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                format_pk: row.get(2)?,
+                country_pk: row.get(3)?,
+                label_pk: row.get(4)?,
+                condition_pk: row.get(5)?,
+                packaging_pk: row.get(6)?,
+                vinyl_color_pk: row.get(7)?,
+                spars_pk: row.get(8)?,
+                owner_pk: row.get(9)?,
+                location_pk: row.get(10)?,
+                collection_pk: row.get(11)?,
+                release_year: row.get(12)?,
+                rating: row.get(13)?,
+                notes: row.get(14)?,
+                upc: row.get(15)?,
+                front_cover: row.get(16)?,
+                back_cover: row.get(17)?,
+                thumbnail: row.get(18)?,
+                backdrop: row.get(19)?,
+                track_count: row.get(20)?,
+            })
         })?
         .filter_map(|r| r.ok())
         .collect();
 
     let mut albums = Vec::with_capacity(rows.len());
-    for (
-        id,
-        title,
-        format_pk,
-        country_pk,
-        label_pk,
-        condition_pk,
-        packaging_pk,
-        vinyl_color_pk,
-        spars_pk,
-        release_year,
-        rating,
-        notes,
-        upc,
-        track_count,
-    ) in rows
-    {
+    for row in rows {
+        let AlbumRow {
+            id,
+            title,
+            format_pk,
+            country_pk,
+            label_pk,
+            condition_pk,
+            packaging_pk,
+            vinyl_color_pk,
+            spars_pk,
+            owner_pk,
+            location_pk,
+            collection_pk,
+            release_year,
+            rating,
+            notes,
+            upc,
+            front_cover,
+            back_cover,
+            thumbnail,
+            backdrop,
+            track_count,
+        } = row;
+
         let resolve = |table: &str, pk: Option<i64>| -> Result<Option<String>> {
             pk.map(|pk| resolve_simple_lookup(conn, table, pk))
                 .transpose()
@@ -262,6 +313,26 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
         let packaging = resolve("ZPACKAGING", packaging_pk)?;
         let vinyl_color = resolve("ZVINYLCOLOR", vinyl_color_pk)?;
         let spars = resolve("ZSPARS", spars_pk)?;
+        let owner = resolve("ZOWNER", owner_pk)?;
+        let location = resolve("ZLOCATION", location_pk)?;
+        let collection = collection_pk
+            .map(|pk| load_collection_name(conn, pk))
+            .transpose()?
+            .flatten();
+
+        let tags = load_many_to_many(conn, "Z_8TAGS", "Z_8COLLECTIBLES", "Z_54TAGS", "ZTAG", id)?;
+        let extras =
+            load_many_to_many(conn, "Z_10EXTRAS", "Z_10ALBUMS1", "Z_26EXTRAS", "ZEXTRA", id)?;
+        let studios = load_many_to_many(
+            conn,
+            "Z_10STUDIOS",
+            "Z_10ALBUMS4",
+            "Z_53STUDIOS",
+            "ZSTUDIO",
+            id,
+        )?;
+        let genres =
+            load_many_to_many(conn, "Z_10GENRES", "Z_10ALBUMS2", "Z_28GENRES", "ZGENRE", id)?;
 
         let artists = load_role_names(conn, "ZARTIST", "ZARTISTPERSON", "ZARTISTPERSON", id)?;
         let composers =
@@ -284,7 +355,6 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
         )?;
         let choruses = load_role_names(conn, "ZCHORUS", "ZCHORUSPERSON", "ZCHORUSPERSON", id)?;
         let credits = load_credits(conn, id)?;
-        let genres = load_genres(conn, id)?;
         let discs = load_discs(conn, id)?;
 
         albums.push(Album {
@@ -298,6 +368,9 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             choruses,
             credits,
             genres,
+            tags,
+            extras,
+            studios,
             label,
             format,
             country,
@@ -305,10 +378,17 @@ fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             packaging,
             vinyl_color,
             spars,
+            owner,
+            location,
+            collection,
             release_year,
             rating,
             notes,
             upc,
+            front_cover,
+            back_cover,
+            thumbnail,
+            backdrop,
             track_count,
             discs,
         });
@@ -329,6 +409,9 @@ fn write_csv(path: &PathBuf, albums: &[Album]) -> Result<()> {
         "choruses",
         "credits",
         "genres",
+        "tags",
+        "extras",
+        "studios",
         "label",
         "format",
         "country",
@@ -336,10 +419,17 @@ fn write_csv(path: &PathBuf, albums: &[Album]) -> Result<()> {
         "packaging",
         "vinyl_color",
         "spars",
+        "owner",
+        "location",
+        "collection",
         "release_year",
         "rating",
         "notes",
         "upc",
+        "front_cover",
+        "back_cover",
+        "thumbnail",
+        "backdrop",
         "track_count",
     ])?;
     for album in albums {
@@ -363,6 +453,9 @@ fn write_csv(path: &PathBuf, albums: &[Album]) -> Result<()> {
             album.choruses.join("; "),
             credits,
             album.genres.join("; "),
+            album.tags.join("; "),
+            album.extras.join("; "),
+            album.studios.join("; "),
             album.label.clone().unwrap_or_default(),
             album.format.clone().unwrap_or_default(),
             album.country.clone().unwrap_or_default(),
@@ -370,10 +463,17 @@ fn write_csv(path: &PathBuf, albums: &[Album]) -> Result<()> {
             album.packaging.clone().unwrap_or_default(),
             album.vinyl_color.clone().unwrap_or_default(),
             album.spars.clone().unwrap_or_default(),
+            album.owner.clone().unwrap_or_default(),
+            album.location.clone().unwrap_or_default(),
+            album.collection.clone().unwrap_or_default(),
             album.release_year.clone().unwrap_or_default(),
             album.rating.map(|r| r.to_string()).unwrap_or_default(),
             album.notes.clone().unwrap_or_default(),
             album.upc.clone().unwrap_or_default(),
+            album.front_cover.clone().unwrap_or_default(),
+            album.back_cover.clone().unwrap_or_default(),
+            album.thumbnail.clone().unwrap_or_default(),
+            album.backdrop.clone().unwrap_or_default(),
             album.track_count.to_string(),
         ])?;
     }
