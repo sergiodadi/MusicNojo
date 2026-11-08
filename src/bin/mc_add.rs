@@ -12,6 +12,16 @@ const ENT_DISC: i64 = 11;
 const ENT_TRACK: i64 = 14;
 const ENT_ARTIST: i64 = 3;
 const ENT_ARTIST_PERSON: i64 = 4;
+const ENT_CHORUS: i64 = 6;
+const ENT_CHORUS_PERSON: i64 = 7;
+const ENT_COMPOSER: i64 = 16;
+const ENT_COMPOSER_PERSON: i64 = 17;
+const ENT_CONDUCTOR: i64 = 21;
+const ENT_CONDUCTOR_PERSON: i64 = 22;
+const ENT_MUSICIAN: i64 = 40;
+const ENT_MUSICIAN_PERSON: i64 = 41;
+const ENT_ORCHESTRA: i64 = 42;
+const ENT_ORCHESTRA_PERSON: i64 = 43;
 const ENT_FORMAT: i64 = 27;
 const ENT_GENRE: i64 = 28;
 const ENT_LABEL: i64 = 32;
@@ -61,6 +71,160 @@ struct AlbumFields {
     upc: Option<String>,
 }
 
+/// Artist/Composer/Conductor/Musician/Orchestra/Chorus each have their
+/// own dedicated entity + person-delegate pair (see mc_export's
+/// load_role_names, which reads the same shape). One repeatable flag
+/// per role, same convention as --artist already had.
+#[derive(clap::Args, Default)]
+struct RoleInputs {
+    #[arg(long = "artist")]
+    artist: Vec<String>,
+    #[arg(long = "composer")]
+    composer: Vec<String>,
+    #[arg(long = "conductor")]
+    conductor: Vec<String>,
+    #[arg(long = "musician")]
+    musician: Vec<String>,
+    #[arg(long = "orchestra")]
+    orchestra: Vec<String>,
+    #[arg(long = "chorus")]
+    chorus: Vec<String>,
+}
+
+impl RoleInputs {
+    fn pairs(&self) -> [(&'static str, &[String]); 6] {
+        [
+            ("artist", &self.artist),
+            ("composer", &self.composer),
+            ("conductor", &self.conductor),
+            ("musician", &self.musician),
+            ("orchestra", &self.orchestra),
+            ("chorus", &self.chorus),
+        ]
+    }
+
+    fn get(&self, key: &str) -> &[String] {
+        self.pairs()
+            .into_iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, v)| v)
+            .unwrap_or(&[])
+    }
+}
+
+/// Mirrors RoleInputs' keys — whether to replace (rather than leave
+/// untouched) each role's list on an edit. Named in the plural, as
+/// the CLI flags read more naturally that way (--replace-artists).
+#[derive(clap::Args, Default)]
+struct RoleReplaceFlags {
+    #[arg(long)]
+    replace_artists: bool,
+    #[arg(long)]
+    replace_composers: bool,
+    #[arg(long)]
+    replace_conductors: bool,
+    #[arg(long)]
+    replace_musicians: bool,
+    #[arg(long)]
+    replace_orchestras: bool,
+    #[arg(long)]
+    replace_choruses: bool,
+}
+
+impl RoleReplaceFlags {
+    fn pairs(&self) -> [(&'static str, bool); 6] {
+        [
+            ("artist", self.replace_artists),
+            ("composer", self.replace_composers),
+            ("conductor", self.replace_conductors),
+            ("musician", self.replace_musicians),
+            ("orchestra", self.replace_orchestras),
+            ("chorus", self.replace_choruses),
+        ]
+    }
+}
+
+struct RoleSpec {
+    key: &'static str,
+    role_table: &'static str,
+    role_entity: &'static str,
+    role_ent_id: i64,
+    person_table: &'static str,
+    person_entity: &'static str,
+    person_ent_id: i64,
+    back_ref: &'static str,
+}
+
+const ROLE_SPECS: &[RoleSpec] = &[
+    RoleSpec {
+        key: "artist",
+        role_table: "ZARTIST",
+        role_entity: "Artist",
+        role_ent_id: ENT_ARTIST,
+        person_table: "ZARTISTPERSON",
+        person_entity: "ArtistPerson",
+        person_ent_id: ENT_ARTIST_PERSON,
+        back_ref: "ZARTISTPERSON",
+    },
+    RoleSpec {
+        key: "composer",
+        role_table: "ZCOMPOSER",
+        role_entity: "Composer",
+        role_ent_id: ENT_COMPOSER,
+        person_table: "ZCOMPOSERPERSON",
+        person_entity: "ComposerPerson",
+        person_ent_id: ENT_COMPOSER_PERSON,
+        back_ref: "ZCOMPOSERPERSON",
+    },
+    RoleSpec {
+        key: "conductor",
+        role_table: "ZCONDUCTOR",
+        role_entity: "Conductor",
+        role_ent_id: ENT_CONDUCTOR,
+        person_table: "ZCONDUCTORPERSON",
+        person_entity: "ConductorPerson",
+        person_ent_id: ENT_CONDUCTOR_PERSON,
+        back_ref: "ZCONDUCTORPERSON",
+    },
+    RoleSpec {
+        key: "musician",
+        role_table: "ZMUSICIAN",
+        role_entity: "Musician",
+        role_ent_id: ENT_MUSICIAN,
+        person_table: "ZMUSICIANPERSON",
+        person_entity: "MusicianPerson",
+        person_ent_id: ENT_MUSICIAN_PERSON,
+        back_ref: "ZMUSICIANPERSON",
+    },
+    RoleSpec {
+        key: "orchestra",
+        role_table: "ZORCHESTRA",
+        role_entity: "Orchestra",
+        role_ent_id: ENT_ORCHESTRA,
+        person_table: "ZORCHESTRAPERSON",
+        person_entity: "OrchestraPerson",
+        person_ent_id: ENT_ORCHESTRA_PERSON,
+        back_ref: "ZORCHESTRAPERSON",
+    },
+    RoleSpec {
+        key: "chorus",
+        role_table: "ZCHORUS",
+        role_entity: "Chorus",
+        role_ent_id: ENT_CHORUS,
+        person_table: "ZCHORUSPERSON",
+        person_entity: "ChorusPerson",
+        person_ent_id: ENT_CHORUS_PERSON,
+        back_ref: "ZCHORUSPERSON",
+    },
+];
+
+fn role_spec(key: &str) -> &'static RoleSpec {
+    ROLE_SPECS
+        .iter()
+        .find(|s| s.key == key)
+        .unwrap_or_else(|| panic!("clé de rôle inconnue: {key}"))
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Compute the SQL to insert a new album, without writing anything
@@ -70,8 +234,8 @@ enum Command {
         db: PathBuf,
         #[arg(long)]
         title: String,
-        #[arg(long = "artist")]
-        artists: Vec<String>,
+        #[command(flatten)]
+        roles: RoleInputs,
         #[arg(long = "genre")]
         genres: Vec<String>,
         #[command(flatten)]
@@ -94,11 +258,10 @@ enum Command {
         title: Option<String>,
         #[command(flatten)]
         fields: AlbumFields,
-        /// Replace the artist list (even with zero --artist, which clears it)
-        #[arg(long)]
-        replace_artists: bool,
-        #[arg(long = "artist")]
-        artists: Vec<String>,
+        #[command(flatten)]
+        replace: RoleReplaceFlags,
+        #[command(flatten)]
+        roles: RoleInputs,
         /// Replace the genre list (even with zero --genre, which clears it)
         #[arg(long)]
         replace_genres: bool,
@@ -242,9 +405,7 @@ fn resolve_or_create_simple_lookup(
 }
 
 /// Finds an existing Artist/Composer/.../person by exact display name,
-/// or plans the delegate + role-person rows needed to create one. Only
-/// Artist is wired into the CLI for now; the same shape applies to the
-/// other role tables (Composer, Conductor, Musician, Orchestra, Chorus).
+/// or plans the delegate + role-person rows needed to create one.
 #[allow(clippy::too_many_arguments)]
 fn resolve_or_create_person(
     conn: &Connection,
@@ -284,6 +445,39 @@ fn resolve_or_create_person(
         name_sql = sql_quote(name)
     ));
     Ok(new_person_id)
+}
+
+/// Resolves-or-creates each named person for one role, and plans the
+/// role-link row (e.g. a ZARTIST row) for each, ranked in list order.
+fn add_role_rows(
+    conn: &Connection,
+    pks: &mut PkAllocator,
+    sql: &mut Vec<String>,
+    spec: &RoleSpec,
+    album_id: i64,
+    names: &[String],
+) -> Result<()> {
+    for (rank, name) in names.iter().enumerate() {
+        let person_id = resolve_or_create_person(
+            conn,
+            pks,
+            sql,
+            spec.person_table,
+            spec.person_entity,
+            spec.person_ent_id,
+            spec.back_ref,
+            name,
+        )?;
+        let role_id = pks.next(spec.role_entity)?;
+        sql.push(format!(
+            "INSERT INTO {role_table} (Z_PK, Z_ENT, Z_OPT, ZRANK, ZALBUM, {back_ref}) \
+             VALUES ({role_id}, {role_ent_id}, 1, {rank}, {album_id}, {person_id});",
+            role_table = spec.role_table,
+            role_ent_id = spec.role_ent_id,
+            back_ref = spec.back_ref,
+        ));
+    }
+    Ok(())
 }
 
 // (field_name_in_struct_access, column, entity_name, ent_id, back_ref_column)
@@ -339,7 +533,7 @@ fn scalar_text_assignments(fields: &AlbumFields) -> Vec<(&'static str, String)> 
 fn build_plan(
     conn: &Connection,
     title: &str,
-    artists: &[String],
+    roles: &RoleInputs,
     genres: &[String],
     fields: &AlbumFields,
     tracks: &[String],
@@ -392,22 +586,10 @@ fn build_plan(
         values.join(", ")
     ));
 
-    for (rank, artist_name) in artists.iter().enumerate() {
-        let artist_person_id = resolve_or_create_person(
-            conn,
-            &mut pks,
-            &mut sql,
-            "ZARTISTPERSON",
-            "ArtistPerson",
-            ENT_ARTIST_PERSON,
-            "ZARTISTPERSON",
-            artist_name,
-        )?;
-        let artist_id = pks.next("Artist")?;
-        sql.push(format!(
-            "INSERT INTO ZARTIST (Z_PK, Z_ENT, Z_OPT, ZRANK, ZALBUM, ZARTISTPERSON) \
-             VALUES ({artist_id}, {ENT_ARTIST}, 1, {rank}, {album_id}, {artist_person_id});"
-        ));
+    for (key, names) in roles.pairs() {
+        if !names.is_empty() {
+            add_role_rows(conn, &mut pks, &mut sql, role_spec(key), album_id, names)?;
+        }
     }
 
     for genre_name in genres {
@@ -447,8 +629,8 @@ fn build_edit_plan(
     album_id: i64,
     title: Option<&str>,
     fields: &AlbumFields,
-    replace_artists: bool,
-    artists: &[String],
+    replace: &RoleReplaceFlags,
+    roles: &RoleInputs,
     replace_genres: bool,
     genres: &[String],
 ) -> Result<String> {
@@ -494,24 +676,14 @@ fn build_edit_plan(
         ));
     }
 
-    if replace_artists {
-        sql.push(format!("DELETE FROM ZARTIST WHERE ZALBUM = {album_id};"));
-        for (rank, artist_name) in artists.iter().enumerate() {
-            let artist_person_id = resolve_or_create_person(
-                conn,
-                &mut pks,
-                &mut sql,
-                "ZARTISTPERSON",
-                "ArtistPerson",
-                ENT_ARTIST_PERSON,
-                "ZARTISTPERSON",
-                artist_name,
-            )?;
-            let artist_id = pks.next("Artist")?;
+    for (key, do_replace) in replace.pairs() {
+        if do_replace {
+            let spec = role_spec(key);
             sql.push(format!(
-                "INSERT INTO ZARTIST (Z_PK, Z_ENT, Z_OPT, ZRANK, ZALBUM, ZARTISTPERSON) \
-                 VALUES ({artist_id}, {ENT_ARTIST}, 1, {rank}, {album_id}, {artist_person_id});"
+                "DELETE FROM {} WHERE ZALBUM = {album_id};",
+                spec.role_table
             ));
+            add_role_rows(conn, &mut pks, &mut sql, spec, album_id, roles.get(key))?;
         }
     }
 
@@ -623,14 +795,14 @@ fn main() -> Result<()> {
         Command::AddPlan {
             db,
             title,
-            artists,
+            roles,
             genres,
             fields,
             tracks,
             out,
         } => {
             let (db_path, conn) = open_readonly(&db)?;
-            let plan_sql = build_plan(&conn, &title, &artists, &genres, &fields, &tracks)?;
+            let plan_sql = build_plan(&conn, &title, &roles, &genres, &fields, &tracks)?;
             emit_plan(&plan_sql, out, &db_path)?;
         }
         Command::EditPlan {
@@ -638,8 +810,8 @@ fn main() -> Result<()> {
             id,
             title,
             fields,
-            replace_artists,
-            artists,
+            replace,
+            roles,
             replace_genres,
             genres,
             out,
@@ -650,8 +822,8 @@ fn main() -> Result<()> {
                 id,
                 title.as_deref(),
                 &fields,
-                replace_artists,
-                &artists,
+                &replace,
+                &roles,
                 replace_genres,
                 &genres,
             )?;
@@ -753,10 +925,15 @@ mod tests {
             format: Some("CD".to_string()),
             ..Default::default()
         };
+        let roles = RoleInputs {
+            artist: vec!["Artiste de test".to_string()],
+            composer: vec!["Compositeur de test".to_string()],
+            ..Default::default()
+        };
         let plan_sql = build_plan(
             &read_conn,
             "Test unitaire mc_add",
-            &["Artiste de test".to_string()],
+            &roles,
             &["Genre de test".to_string()],
             &fields,
             &["Piste unique".to_string()],
@@ -779,15 +956,29 @@ mod tests {
             )
             .unwrap();
         assert_eq!(title, "Test unitaire mc_add");
+        let composer_count: i64 = verify_conn
+            .query_row(
+                "SELECT COUNT(*) FROM ZCOMPOSER WHERE ZALBUM = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(composer_count, 1);
 
-        // Edit: rename, replace the genre list.
+        // Edit: rename, replace the genre list AND the composer list.
         let edit_sql = build_edit_plan(
             &verify_conn,
             album_id,
             Some("Titre modifié"),
             &AlbumFields::default(),
-            false,
-            &[],
+            &RoleReplaceFlags {
+                replace_composers: true,
+                ..Default::default()
+            },
+            &RoleInputs {
+                composer: vec!["Autre compositeur".to_string()],
+                ..Default::default()
+            },
             true,
             &["Autre genre".to_string()],
         )
@@ -816,6 +1007,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(genre_count, 1);
+        let new_composer_name: String = verify_conn
+            .query_row(
+                "SELECT p.ZDISPLAYNAME FROM ZCOMPOSER c \
+                 JOIN ZCOMPOSERPERSON cp ON cp.Z_PK = c.ZCOMPOSERPERSON \
+                 JOIN ZPERSONDELEGATE p ON p.Z_PK = cp.ZDELEGATE \
+                 WHERE c.ZALBUM = ?1",
+                [album_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(new_composer_name, "Autre compositeur");
 
         // Delete: the album and its track should both disappear.
         let delete_sql = build_delete_plan(&verify_conn, album_id).unwrap();
