@@ -40,15 +40,56 @@ header h1 {
 #main {
   display: flex;
   height: calc(100vh - 57px);
+  min-height: 0;
 }
 
 #groups {
   width: 14rem;
   flex-shrink: 0;
-  border-right: 1px solid #ddd;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  background: #fbfbfc;
+}
+
+#splitter-v {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: #ddd;
+}
+
+#splitter-v:hover,
+#splitter-v.dragging {
+  background: #6a7fe0;
+}
+
+#right-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+#list-pane {
+  flex: 0 0 55%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+#splitter-h {
+  height: 5px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background: #ddd;
+}
+
+#splitter-h:hover,
+#splitter-h.dragging {
+  background: #6a7fe0;
 }
 
 #group-field {
@@ -87,9 +128,6 @@ header h1 {
 table {
   border-collapse: collapse;
   width: 100%;
-  flex: 1;
-  overflow: auto;
-  align-content: flex-start;
 }
 
 th, td {
@@ -115,12 +153,12 @@ tr:hover td {
 }
 
 #detail {
-  width: 22rem;
-  flex-shrink: 0;
-  border-left: 1px solid #ddd;
+  flex: 1;
+  min-height: 0;
   padding: 1rem;
   overflow-y: auto;
   position: relative;
+  background: #fff;
 }
 
 #detail-empty {

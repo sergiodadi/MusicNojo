@@ -389,4 +389,76 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+// --- Draggable splitters (groups|rest, and list|detail) ---------------
+// Same approach as BookNojo's own app: a drag handle tracks mousemove
+// on the window (not just the handle) so a fast drag doesn't lose the
+// pointer, and persists sizes to localStorage as a per-viewer
+// convenience only (never read back by anything else).
+const MIN_GROUPS_W = 120;
+const MAX_GROUPS_W = 420;
+const MIN_LIST_H = 100;
+const MIN_DETAIL_H = 120;
+
+const mainEl = document.getElementById("main");
+const groupsEl = document.getElementById("groups");
+const rightColEl = document.getElementById("right-col");
+const listPaneEl = document.getElementById("list-pane");
+const splitterV = document.getElementById("splitter-v");
+const splitterH = document.getElementById("splitter-h");
+
+function makeDraggable(handle, onDrag) {
+  let dragging = false;
+  handle.addEventListener("mousedown", (e) => {
+    dragging = true;
+    handle.classList.add("dragging");
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (dragging) onDrag(e);
+  });
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("dragging");
+    document.body.style.userSelect = "";
+    saveLayout();
+  });
+}
+
+makeDraggable(splitterV, (e) => {
+  const rect = mainEl.getBoundingClientRect();
+  const w = Math.max(MIN_GROUPS_W, Math.min(MAX_GROUPS_W, e.clientX - rect.left));
+  groupsEl.style.width = `${w}px`;
+});
+
+makeDraggable(splitterH, (e) => {
+  const rect = rightColEl.getBoundingClientRect();
+  const maxH = rect.height - MIN_DETAIL_H - splitterH.offsetHeight;
+  const h = Math.max(MIN_LIST_H, Math.min(maxH, e.clientY - rect.top));
+  listPaneEl.style.flex = `0 0 ${h}px`;
+});
+
+function saveLayout() {
+  try {
+    localStorage.setItem(
+      "musicnojo_layout",
+      JSON.stringify({ groupsWidth: groupsEl.style.width, listHeight: listPaneEl.style.flex })
+    );
+  } catch {
+    // Private window / blocked site data — keep defaults, not fatal.
+  }
+}
+
+function restoreLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("musicnojo_layout") || "{}");
+    if (saved.groupsWidth) groupsEl.style.width = saved.groupsWidth;
+    if (saved.listHeight) listPaneEl.style.flex = saved.listHeight;
+  } catch {
+    // Ignore a corrupt/missing value — defaults from CSS still apply.
+  }
+}
+
+restoreLayout();
 loadCollection(null);

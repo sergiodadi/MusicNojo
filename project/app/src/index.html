@@ -13,7 +13,7 @@
     <input id="search" type="search" placeholder="Search by title or artist…" autofocus />
     <span id="count"></span>
   </header>
-  <div id="main">
+  <main id="main">
     <aside id="groups">
       <select id="group-field">
         <option value="artists">Artist</option>
@@ -24,27 +24,33 @@
       </select>
       <div id="group-list"></div>
     </aside>
-    <table id="albums">
-      <thead>
-        <tr>
-          <th data-k="title">Title</th>
-          <th data-k="artists">Artist(s)</th>
-          <th data-k="genres">Genre(s)</th>
-          <th data-k="format">Format</th>
-          <th data-k="release_year">Year</th>
-          <th data-k="track_count">Tracks</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-    <aside id="detail">
-      <div id="detail-content"><p id="detail-empty">Select an album.</p></div>
-      <div id="detail-actions" hidden>
-        <button id="detail-edit">Edit…</button>
-        <button id="detail-delete">Delete…</button>
+    <div id="splitter-v" title="Drag to resize"></div>
+    <div id="right-col">
+      <div id="list-pane">
+        <table id="albums">
+          <thead>
+            <tr>
+              <th data-k="title">Title</th>
+              <th data-k="artists">Artist(s)</th>
+              <th data-k="genres">Genre(s)</th>
+              <th data-k="format">Format</th>
+              <th data-k="release_year">Year</th>
+              <th data-k="track_count">Tracks</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
       </div>
-    </aside>
-  </div>
+      <div id="splitter-h" title="Drag to resize"></div>
+      <aside id="detail">
+        <div id="detail-content"><p id="detail-empty">Select an album.</p></div>
+        <div id="detail-actions" hidden>
+          <button id="detail-edit">Edit…</button>
+          <button id="detail-delete">Delete…</button>
+        </div>
+      </aside>
+    </div>
+  </main>
 
   <dialog id="album-form-dialog">
     <form id="album-form" method="dialog">
