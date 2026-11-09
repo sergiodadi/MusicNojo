@@ -8,19 +8,22 @@
 <body>
   <header>
     <h1>MusicNojo</h1>
-    <button id="open-collection">Open Collection…</button>
-    <button id="add-album">Add Album…</button>
-    <input id="search" type="search" placeholder="Search by title or artist…" autofocus />
+    <input id="search" type="search" data-i18n-placeholder="search_placeholder" placeholder="Search by title or artist…" autofocus />
     <span id="count"></span>
+    <span id="file-badge"></span>
+    <span id="app-version">MusicNojo</span>
+    <button id="open-collection" data-i18n="nav_open">Open Collection…</button>
+    <button id="add-album" data-i18n="nav_add">Add Album…</button>
+    <button id="stats-btn" data-i18n="nav_stats">📊 Statistics</button>
   </header>
   <main id="main">
     <aside id="groups">
       <select id="group-field">
-        <option value="artists">Artist</option>
-        <option value="genres">Genre</option>
-        <option value="format">Format</option>
-        <option value="country">Country</option>
-        <option value="label">Label</option>
+        <option value="artists" data-i18n="opt_group_artists">Artist</option>
+        <option value="genres" data-i18n="opt_group_genres">Genre</option>
+        <option value="format" data-i18n="opt_group_format">Format</option>
+        <option value="country" data-i18n="opt_group_country">Country</option>
+        <option value="label" data-i18n="opt_group_label">Label</option>
       </select>
       <div id="group-list"></div>
     </aside>
@@ -30,12 +33,12 @@
         <table id="albums">
           <thead>
             <tr>
-              <th data-k="title">Title</th>
-              <th data-k="artists">Artist(s)</th>
-              <th data-k="genres">Genre(s)</th>
-              <th data-k="format">Format</th>
-              <th data-k="release_year">Year</th>
-              <th data-k="track_count">Tracks</th>
+              <th data-k="title" data-i18n="col_title">Title</th>
+              <th data-k="artists" data-i18n="col_artists">Artist(s)</th>
+              <th data-k="genres" data-i18n="col_genres">Genre(s)</th>
+              <th data-k="format" data-i18n="col_format">Format</th>
+              <th data-k="release_year" data-i18n="col_year">Year</th>
+              <th data-k="track_count" data-i18n="col_tracks">Tracks</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -43,47 +46,48 @@
       </div>
       <div id="splitter-h" title="Drag to resize"></div>
       <aside id="detail">
-        <div id="detail-content"><p id="detail-empty">Select an album.</p></div>
+        <div id="detail-content"><p id="detail-empty" data-i18n="detail_select">Select an album.</p></div>
         <div id="detail-actions" hidden>
-          <button id="detail-edit">Edit…</button>
-          <button id="detail-delete">Delete…</button>
+          <button id="detail-edit" data-i18n="detail_edit">Edit…</button>
+          <button id="detail-delete" data-i18n="detail_delete">Delete…</button>
         </div>
       </aside>
     </div>
   </main>
+  <div id="stats-pane"></div>
 
   <dialog id="album-form-dialog">
     <form id="album-form" method="dialog">
       <h2 id="album-form-title">Add Album</h2>
-      <label>Title <input name="title" required /></label>
-      <label>Artist(s), comma-separated <input name="artists" /></label>
-      <label>Composer(s) <input name="composers" /></label>
-      <label>Conductor(s) <input name="conductors" /></label>
-      <label>Musician(s) <input name="musicians" /></label>
-      <label>Orchestra(s) <input name="orchestras" /></label>
-      <label>Chorus(es) <input name="choruses" /></label>
-      <label>Genre(s) <input name="genres" /></label>
-      <label>Tag(s) <input name="tags" /></label>
-      <label>Extra(s) <input name="extras" /></label>
-      <label>Studio(s) <input name="studios" /></label>
+      <label><span data-i18n="form_label_title">Title</span> <input name="title" required /></label>
+      <label><span data-i18n="form_label_artists">Artist(s), comma-separated</span> <input name="artists" /></label>
+      <label><span data-i18n="form_label_composers">Composer(s)</span> <input name="composers" /></label>
+      <label><span data-i18n="form_label_conductors">Conductor(s)</span> <input name="conductors" /></label>
+      <label><span data-i18n="form_label_musicians">Musician(s)</span> <input name="musicians" /></label>
+      <label><span data-i18n="form_label_orchestras">Orchestra(s)</span> <input name="orchestras" /></label>
+      <label><span data-i18n="form_label_choruses">Chorus(es)</span> <input name="choruses" /></label>
+      <label><span data-i18n="form_label_genres">Genre(s)</span> <input name="genres" /></label>
+      <label><span data-i18n="form_label_tags">Tag(s)</span> <input name="tags" /></label>
+      <label><span data-i18n="form_label_extras">Extra(s)</span> <input name="extras" /></label>
+      <label><span data-i18n="form_label_studios">Studio(s)</span> <input name="studios" /></label>
       <div class="row">
-        <label>Format <input name="format" /></label>
-        <label>Label <input name="label" /></label>
-        <label>Country <input name="country" /></label>
+        <label><span data-i18n="form_label_format">Format</span> <input name="format" /></label>
+        <label><span data-i18n="form_label_label">Label</span> <input name="label" /></label>
+        <label><span data-i18n="form_label_country">Country</span> <input name="country" /></label>
       </div>
       <div class="row">
-        <label>Year <input name="release_year" /></label>
-        <label>Rating <input name="rating" type="number" min="0" max="5" /></label>
-        <label>UPC <input name="upc" /></label>
+        <label><span data-i18n="form_label_year">Year</span> <input name="release_year" /></label>
+        <label><span data-i18n="form_label_rating">Rating</span> <input name="rating" type="number" min="0" max="5" /></label>
+        <label><span data-i18n="form_label_upc">UPC</span> <input name="upc" /></label>
       </div>
-      <label>Notes <textarea name="notes" rows="2"></textarea></label>
-      <label>Tracks, one per line
-        <textarea name="tracks" rows="4" placeholder="One track title per line"></textarea>
+      <label><span data-i18n="form_label_notes">Notes</span> <textarea name="notes" rows="2"></textarea></label>
+      <label><span data-i18n="form_label_tracks">Tracks, one per line</span>
+        <textarea name="tracks" rows="4" data-i18n-placeholder="form_tracks_placeholder" placeholder="One track title per line"></textarea>
       </label>
       <div id="album-form-error" class="error"></div>
       <menu>
-        <button type="button" id="album-form-cancel">Cancel</button>
-        <button type="submit" id="album-form-submit">Save</button>
+        <button type="button" id="album-form-cancel" data-i18n="form_cancel">Cancel</button>
+        <button type="submit" id="album-form-submit" data-i18n="form_save">Save</button>
       </menu>
     </form>
   </dialog>

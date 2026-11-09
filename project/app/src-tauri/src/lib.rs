@@ -65,6 +65,14 @@ fn resolve_collection_path(path: Option<String>) -> std::path::PathBuf {
     resolved.canonicalize().unwrap_or(resolved)
 }
 
+/// The app's HTML shell has no build step to burn a version string into it,
+/// so the frontend asks for it over IPC instead — same pattern as BookNojo's
+/// own `app_version` command.
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 #[tauri::command]
 fn list_albums(app: tauri::AppHandle, path: Option<String>) -> Result<AlbumsResponse, String> {
     let path = resolve_collection_path(path);
@@ -291,6 +299,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            app_version,
             list_albums,
             pick_collection,
             add_album,
