@@ -123,19 +123,9 @@ tr:hover td {
   position: relative;
 }
 
-#detail[hidden] {
-  display: none;
-}
-
-#detail-close {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  border: none;
-  background: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-  color: #666;
+#detail-empty {
+  color: #888;
+  font-style: italic;
 }
 
 #detail-content .cover {
@@ -183,6 +173,10 @@ tr:hover td {
   margin-top: 1rem;
   border-top: 1px solid #eee;
   padding-top: 1rem;
+}
+
+#detail-actions[hidden] {
+  display: none;
 }
 
 #detail-actions button {

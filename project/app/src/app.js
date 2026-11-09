@@ -159,12 +159,14 @@ function showDetail(id) {
     </dl>
     ${discs}
   `;
-  document.getElementById("detail").hidden = false;
+  document.getElementById("detail-actions").hidden = false;
 }
 
-document.getElementById("detail-close").addEventListener("click", () => {
-  document.getElementById("detail").hidden = true;
-});
+function clearDetail() {
+  currentDetailId = null;
+  document.getElementById("detail-content").innerHTML = '<p id="detail-empty">Select an album.</p>';
+  document.getElementById("detail-actions").hidden = true;
+}
 
 document.getElementById("search").addEventListener("input", (e) => render(e.target.value));
 document.querySelectorAll("th").forEach((th) =>
@@ -186,7 +188,7 @@ async function loadCollection(path) {
     // load passes path=null (meaning "use the bundled sample-collection"),
     // which resp.path resolves to a real path.
     currentPath = resp.path;
-    document.getElementById("detail").hidden = true;
+    clearDetail();
     selectedGroup = null;
     renderGroups();
     render(document.getElementById("search").value);
@@ -302,7 +304,7 @@ document.getElementById("detail-delete").addEventListener("click", async () => {
   if (!confirm(`Delete "${a.title}"? This cannot be undone (a backup is made first).`)) return;
   try {
     await invoke("delete_album", { path: currentPath, id: a.id });
-    document.getElementById("detail").hidden = true;
+    clearDetail();
     await loadCollection(currentPath);
   } catch (err) {
     alert(`Delete failed: ${err}`);
@@ -380,7 +382,7 @@ form.addEventListener("submit", async (e) => {
       });
     }
     dialog.close();
-    document.getElementById("detail").hidden = true;
+    clearDetail();
     await loadCollection(currentPath);
   } catch (err) {
     formError.textContent = String(err);
