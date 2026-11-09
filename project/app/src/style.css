@@ -32,9 +32,22 @@ header h1 {
   font-size: 0.85rem;
 }
 
+#open-collection {
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+#main {
+  display: flex;
+  height: calc(100vh - 57px);
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
+  flex: 1;
+  overflow: auto;
+  align-content: flex-start;
 }
 
 th, td {
@@ -48,9 +61,70 @@ th {
   user-select: none;
   background: #fafafa;
   position: sticky;
-  top: 48px;
+  top: 0;
+}
+
+tbody tr {
+  cursor: pointer;
 }
 
 tr:hover td {
   background: #f5f7ff;
+}
+
+#detail {
+  width: 22rem;
+  flex-shrink: 0;
+  border-left: 1px solid #ddd;
+  padding: 1rem;
+  overflow-y: auto;
+  position: relative;
+}
+
+#detail[hidden] {
+  display: none;
+}
+
+#detail-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  border: none;
+  background: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #666;
+}
+
+#detail-content h2 {
+  font-size: 1.05rem;
+  margin: 0 1.5rem 0.75rem 0;
+}
+
+#detail-content dl {
+  display: grid;
+  grid-template-columns: 6rem 1fr;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.9rem;
+  margin: 0 0 1rem 0;
+}
+
+#detail-content dt {
+  color: #666;
+}
+
+#detail-content dd {
+  margin: 0;
+}
+
+#detail-content ol {
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+}
+
+#detail-content .disc-heading {
+  font-weight: 600;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #444;
 }
