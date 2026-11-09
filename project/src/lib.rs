@@ -103,6 +103,11 @@ pub fn resolve_db_path(path: &Path) -> std::path::PathBuf {
 struct Lookups {
     simple: HashMap<&'static str, HashMap<i64, String>>,
     collections: HashMap<i64, String>,
+    // Owner is a *person* (resolves through ZPERSONDELEGATE, same as
+    // Artist/Composer/...), not a category value like Format/Label —
+    // ZLOOKUPITEMDELEGATE has no ZOWNER column at all. Kept separate
+    // from `simple` rather than forced into that shape.
+    owners: HashMap<i64, String>,
     roles: HashMap<&'static str, HashMap<i64, Vec<String>>>,
     credits: HashMap<i64, Vec<Credit>>,
     many_to_many: HashMap<&'static str, HashMap<i64, Vec<String>>>,
@@ -118,7 +123,6 @@ const SIMPLE_LOOKUPS: &[&str] = &[
     "ZPACKAGING",
     "ZVINYLCOLOR",
     "ZSPARS",
-    "ZOWNER",
     "ZLOCATION",
 ];
 
@@ -161,6 +165,18 @@ fn load_simple_lookup_map(conn: &Connection, table: &str) -> Result<HashMap<i64,
          JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE"
     );
     let mut stmt = conn.prepare(&sql)?;
+    let map = stmt
+        .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(map)
+}
+
+fn load_owner_map(conn: &Connection) -> Result<HashMap<i64, String>> {
+    let mut stmt = conn.prepare(
+        "SELECT o.Z_PK, p.ZDISPLAYNAME FROM ZOWNER o \
+         JOIN ZPERSONDELEGATE p ON p.Z_PK = o.ZDELEGATE",
+    )?;
     let map = stmt
         .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)))?
         .filter_map(|r| r.ok())
@@ -315,6 +331,7 @@ fn load_lookups(conn: &Connection) -> Result<Lookups> {
     Ok(Lookups {
         simple,
         collections: load_collection_map(conn)?,
+        owners: load_owner_map(conn)?,
         roles,
         credits: load_credit_map(conn)?,
         many_to_many,
@@ -470,7 +487,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             packaging: lookups.simple("ZPACKAGING", packaging_pk),
             vinyl_color: lookups.simple("ZVINYLCOLOR", vinyl_color_pk),
             spars: lookups.simple("ZSPARS", spars_pk),
-            owner: lookups.simple("ZOWNER", owner_pk),
+            owner: owner_pk.and_then(|pk| lookups.owners.get(&pk).cloned()),
             location: lookups.simple("ZLOCATION", location_pk),
             collection: collection_pk.and_then(|pk| lookups.collections.get(&pk).cloned()),
             release_year,
@@ -1339,8 +1356,14 @@ fn resolve_simple_fields(
     resolve!(fields.packaging, "packaging", "ZPACKAGING", "Packaging", ENT_PACKAGING, "ZPACKAGING");
     resolve!(fields.vinyl_color, "vinyl_color", "ZVINYLCOLOR", "VinylColor", ENT_VINYL_COLOR, "ZVINYLCOLOR");
     resolve!(fields.spars, "spars", "ZSPARS", "Spars", ENT_SPARS, "ZSPARS");
-    resolve!(fields.owner, "owner", "ZOWNER", "Owner", ENT_OWNER, "ZOWNER");
     resolve!(fields.location, "location", "ZLOCATION", "Location", ENT_LOCATION, "ZLOCATION");
+    // Owner is a person (ZPERSONDELEGATE), not a category value — see
+    // the Lookups::owners doc comment. resolve_or_create_person is the
+    // same helper Artist/Composer/... use.
+    if let Some(name) = fields.owner.as_deref() {
+        let id = resolve_or_create_person(conn, pks, sql, "ZOWNER", "Owner", ENT_OWNER, "ZOWNER", name)?;
+        ids.insert("owner", id);
+    }
     Ok(ids)
 }
 

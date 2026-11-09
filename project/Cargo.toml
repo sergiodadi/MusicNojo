@@ -23,3 +23,9 @@ serde_json = "1"
 csv = "1"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+# Only for examples/generate_sample_collection.rs's placeholder covers
+# (plain synthetic colors, never real artwork) — not needed by the
+# actual CLI tools.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
