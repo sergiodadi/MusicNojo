@@ -49,10 +49,20 @@ fn grant_asset_scope_for_collection<R: tauri::Runtime>(app: &tauri::AppHandle<R>
 
 /// The bare path-resolution rule ("null means the bundled sample-
 /// collection"), split out from list_albums so it's testable without a
-/// Tauri AppHandle at all.
+/// Tauri AppHandle at all. Canonicalized (no leftover `..` segments,
+/// e.g. the sample-collection path is built from CARGO_MANIFEST_DIR +
+/// "../../sample-collection/...") — the asset-protocol scope granted
+/// for cover images below must exactly match how the asset request's
+/// path is represented, and an unresolved `..` is a real way for a
+/// "same directory, different spelling" mismatch to silently fail that
+/// check (found this: covers never rendered from the default
+/// collection, with no error anywhere — a blocked asset load doesn't
+/// throw in the frontend, it just never resolves the <img>).
 fn resolve_collection_path(path: Option<String>) -> std::path::PathBuf {
-    path.map(std::path::PathBuf::from)
-        .unwrap_or_else(sample_collection_path)
+    let resolved = path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(sample_collection_path);
+    resolved.canonicalize().unwrap_or(resolved)
 }
 
 #[tauri::command]
@@ -185,7 +195,11 @@ mod tests {
     fn list_albums_with_no_path_returns_a_usable_path() {
         let resolved = resolve_collection_path(None);
         assert!(resolved.exists());
-        assert_eq!(resolved, sample_collection_path());
+        assert_eq!(resolved, sample_collection_path().canonicalize().unwrap());
+        // No leftover ".." segments — see resolve_collection_path's doc
+        // comment for why this specifically matters (asset-protocol
+        // scope matching, not just cosmetic).
+        assert!(!resolved.to_string_lossy().contains(".."));
 
         // The resolved path must round-trip through load_albums the
         // same way list_albums itself does.
