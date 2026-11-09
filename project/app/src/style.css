@@ -96,6 +96,12 @@ tr:hover td {
   color: #666;
 }
 
+#detail-content .cover {
+  width: 100%;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+}
+
 #detail-content h2 {
   font-size: 1.05rem;
   margin: 0 1.5rem 0.75rem 0;

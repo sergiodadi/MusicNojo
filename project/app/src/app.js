@@ -3,7 +3,15 @@ const { invoke } = window.__TAURI__.core;
 let albums = [];
 let sortKey = "title";
 let sortAsc = true;
-let currentPath = null;
+let imagesDir = "";
+
+// The WebView's security sandbox blocks raw file:// loads, so cover
+// images go through Tauri's asset protocol instead (only serves paths
+// explicitly granted via asset_protocol_scope — see lib.rs).
+function coverSrc(filename) {
+  if (!filename || !imagesDir) return null;
+  return window.__TAURI__.core.convertFileSrc(`${imagesDir}/${filename}`);
+}
 
 function escapeHtml(s) {
   return String(s ?? "").replace(
@@ -73,7 +81,11 @@ function showDetail(id) {
     })
     .join("");
 
+  const front = coverSrc(a.front_cover);
+  const cover = front ? `<img class="cover" src="${front}" alt="">` : "";
+
   document.getElementById("detail-content").innerHTML = `
+    ${cover}
     <h2>${escapeHtml(a.title)}</h2>
     <dl>
       ${roleList("Artist(s)", a.artists)}
@@ -113,8 +125,9 @@ document.querySelectorAll("th").forEach((th) =>
 
 async function loadCollection(path) {
   try {
-    albums = await invoke("list_albums", { path });
-    currentPath = path;
+    const resp = await invoke("list_albums", { path });
+    albums = resp.albums;
+    imagesDir = resp.images_dir;
     document.getElementById("detail").hidden = true;
     render(document.getElementById("search").value);
   } catch (err) {
