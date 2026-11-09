@@ -697,7 +697,7 @@ const ENT_LOCATION: i64 = 38;
 const ENT_LOOKUP_ITEM_DELEGATE: i64 = 39;
 const ENT_PERSON_DELEGATE: i64 = 46;
 
-#[derive(clap::Args, Default)]
+#[derive(clap::Args, serde::Deserialize, Default)]
 pub struct AlbumFields {
     #[arg(long)]
     pub format: Option<String>,
@@ -730,7 +730,7 @@ pub struct AlbumFields {
 /// Artist/Composer/Conductor/Musician/Orchestra/Chorus each have their
 /// own dedicated entity + person-delegate pair (see load_role_names's
 /// shape above). One repeatable flag per role.
-#[derive(clap::Args, Default)]
+#[derive(clap::Args, serde::Deserialize, Default)]
 pub struct RoleInputs {
     #[arg(long = "artist")]
     pub artist: Vec<String>,
@@ -770,7 +770,7 @@ impl RoleInputs {
 /// Mirrors RoleInputs' keys — whether to replace (rather than leave
 /// untouched) each role's list on an edit. Named in the plural, as
 /// the CLI flags read more naturally that way (--replace-artists).
-#[derive(clap::Args, Default)]
+#[derive(clap::Args, serde::Deserialize, Default)]
 pub struct RoleReplaceFlags {
     #[arg(long)]
     pub replace_artists: bool,
@@ -884,7 +884,7 @@ fn role_spec(key: &str) -> &'static RoleSpec {
 /// (e.g. Z_10GENRES) linking the album to a simple lookup entity — same
 /// resolve-or-create as Format/Label/..., just through a join table
 /// instead of a direct column on ZCOLLECTIBLE.
-#[derive(clap::Args, Default)]
+#[derive(clap::Args, serde::Deserialize, Default)]
 pub struct ManyToManyInputs {
     #[arg(long = "genre")]
     pub genre: Vec<String>,
@@ -915,7 +915,7 @@ impl ManyToManyInputs {
     }
 }
 
-#[derive(clap::Args, Default)]
+#[derive(clap::Args, serde::Deserialize, Default)]
 pub struct ManyToManyReplaceFlags {
     #[arg(long)]
     pub replace_genres: bool,
@@ -1015,6 +1015,26 @@ pub fn ensure_not_real_collection(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Copies the Music_data file to a timestamped backup next to it, before
+/// any write — cheap (a few MB at most, no images involved) and undoes
+/// the one real risk (a bad add/edit/delete), without needing to touch
+/// Images/, which these operations never modify.
+pub fn backup_database(db_path: &Path) -> Result<PathBuf> {
+    let backups_dir = db_path
+        .parent()
+        .map(|p| p.join("backups"))
+        .unwrap_or_else(|| PathBuf::from("backups"));
+    std::fs::create_dir_all(&backups_dir)?;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let backup_path = backups_dir.join(format!("Music_data.{timestamp}.bak"));
+    std::fs::copy(db_path, &backup_path)
+        .with_context(|| format!("sauvegarde de {}", db_path.display()))?;
+    Ok(backup_path)
+}
+
 /// The package's Images/ folder, given either the package directory or
 /// its Music_data file directly.
 pub fn images_dir(db: &Path) -> PathBuf {
@@ -1048,6 +1068,7 @@ pub fn set_cover(db: &Path, album_id: i64, front: Option<&Path>, back: Option<&P
     let db_path = resolve_db_path(db);
     let images = images_dir(db);
     std::fs::create_dir_all(&images)?;
+    backup_database(&db_path)?;
 
     let conn = Connection::open(&db_path)
         .with_context(|| format!("ouverture de {}", db_path.display()))?;

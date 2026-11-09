@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use music_collector_export::{
-    build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection, open_readonly,
-    resolve_db_path, set_cover, AlbumFields, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs,
-    RoleReplaceFlags,
+    backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
+    open_readonly, resolve_db_path, set_cover, AlbumFields, ManyToManyInputs,
+    ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
 };
 use rusqlite::Connection;
 
@@ -171,12 +171,14 @@ fn main() -> Result<()> {
             let plan_sql = std::fs::read_to_string(&plan)
                 .with_context(|| format!("lecture de {}", plan.display()))?;
 
+            let backup = backup_database(&db_path)?;
             let conn = Connection::open(&db_path)
                 .with_context(|| format!("ouverture de {}", db_path.display()))?;
             // plan_sql already wraps its statements in BEGIN;/COMMIT;
             conn.execute_batch(&plan_sql)
                 .with_context(|| "exécution du plan")?;
             println!("Plan exécuté dans: {}", db_path.display());
+            println!("Sauvegarde: {}", backup.display());
         }
         Command::SetCover {
             db,
