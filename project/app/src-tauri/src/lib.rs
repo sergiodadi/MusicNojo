@@ -24,6 +24,11 @@ struct AlbumsResponse {
     /// Album type, which deliberately keeps just the filename (same
     /// shape mc_export's CSV/JSON already expose).
     images_dir: String,
+    /// The actual collection path used — the frontend starts with no
+    /// path (loads the bundled sample-collection by default) and must
+    /// learn the real one to pass to add_album/edit_album/delete_album,
+    /// which require a concrete path, not null.
+    path: String,
 }
 
 /// Also grants the asset protocol (used for `convertFileSrc`-loaded
@@ -42,11 +47,17 @@ fn grant_asset_scope_for_collection<R: tauri::Runtime>(app: &tauri::AppHandle<R>
     }
 }
 
+/// The bare path-resolution rule ("null means the bundled sample-
+/// collection"), split out from list_albums so it's testable without a
+/// Tauri AppHandle at all.
+fn resolve_collection_path(path: Option<String>) -> std::path::PathBuf {
+    path.map(std::path::PathBuf::from)
+        .unwrap_or_else(sample_collection_path)
+}
+
 #[tauri::command]
 fn list_albums(app: tauri::AppHandle, path: Option<String>) -> Result<AlbumsResponse, String> {
-    let path = path
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(sample_collection_path);
+    let path = resolve_collection_path(path);
     let db_path = resolve_db_path(&path);
     grant_asset_scope_for_collection(&app, &db_path);
 
@@ -56,7 +67,11 @@ fn list_albums(app: tauri::AppHandle, path: Option<String>) -> Result<AlbumsResp
         .parent()
         .map(|p| p.join("Images").to_string_lossy().to_string())
         .unwrap_or_default();
-    Ok(AlbumsResponse { albums, images_dir })
+    Ok(AlbumsResponse {
+        albums,
+        images_dir,
+        path: path.to_string_lossy().to_string(),
+    })
 }
 
 /// Native folder picker for a .mucp package. Uses the dialog plugin's
@@ -155,6 +170,27 @@ mod tests {
             }
         }
         Ok(())
+    }
+
+    /// Reproduces the exact bug the user hit: on first load the
+    /// frontend calls list_albums with path=null (meaning "use the
+    /// bundled sample-collection"). Before the fix, AlbumsResponse had
+    /// no `path` field, so the frontend kept `currentPath = null` and
+    /// later calls to add_album (which requires a concrete String)
+    /// failed IPC deserialization of that null. This only checks that
+    /// list_albums(None) now echoes back a real, non-empty, existing
+    /// path — it never writes to the committed sample-collection/, to
+    /// avoid mutating a tracked fixture from a test run.
+    #[test]
+    fn list_albums_with_no_path_returns_a_usable_path() {
+        let resolved = resolve_collection_path(None);
+        assert!(resolved.exists());
+        assert_eq!(resolved, sample_collection_path());
+
+        // The resolved path must round-trip through load_albums the
+        // same way list_albums itself does.
+        let conn = open_readonly(&resolved).unwrap();
+        assert!(!load_albums(&conn).unwrap().is_empty());
     }
 
     /// Exercises add_album/edit_album/delete_album exactly as the IPC

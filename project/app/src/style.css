@@ -42,6 +42,48 @@ header h1 {
   height: calc(100vh - 57px);
 }
 
+#groups {
+  width: 14rem;
+  flex-shrink: 0;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+#group-field {
+  margin: 0.6rem;
+  padding: 0.3rem;
+}
+
+#group-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+#group-list div {
+  padding: 0.35rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+#group-list div:hover {
+  background: #f5f7ff;
+}
+
+#group-list div.selected {
+  background: #e4e9ff;
+  font-weight: 600;
+}
+
+#group-list .group-count {
+  color: #888;
+  font-size: 0.8rem;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

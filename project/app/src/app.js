@@ -6,6 +6,54 @@ let sortAsc = true;
 let imagesDir = "";
 let currentPath = null;
 let currentDetailId = null;
+let groupField = "artists";
+let selectedGroup = null;
+
+// Scalar fields (format/country/label) and array fields (artists/
+// genres) both need to behave like "this album belongs to these
+// group values" — scalars are wrapped as a single-element list.
+function groupValues(album, field) {
+  const v = album[field];
+  if (Array.isArray(v)) return v;
+  return v ? [v] : [];
+}
+
+function renderGroups() {
+  const counts = new Map();
+  for (const a of albums) {
+    for (const v of groupValues(a, groupField)) {
+      counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+  }
+  const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const list = document.getElementById("group-list");
+  list.innerHTML =
+    `<div class="${selectedGroup === null ? "selected" : ""}" data-group="">
+       <span>All</span><span class="group-count">${albums.length}</span>
+     </div>` +
+    sorted
+      .map(
+        ([value, count]) => `<div class="${value === selectedGroup ? "selected" : ""}" data-group="${escapeHtml(value)}">
+          <span>${escapeHtml(value)}</span><span class="group-count">${count}</span>
+        </div>`
+      )
+      .join("");
+  list.querySelectorAll("div").forEach((div) =>
+    div.addEventListener("click", () => {
+      selectedGroup = div.dataset.group || null;
+      renderGroups();
+      render(document.getElementById("search").value);
+    })
+  );
+}
+
+document.getElementById("group-field").addEventListener("change", (e) => {
+  groupField = e.target.value;
+  selectedGroup = null;
+  renderGroups();
+  render(document.getElementById("search").value);
+});
 
 // The WebView's security sandbox blocks raw file:// loads, so cover
 // images go through Tauri's asset protocol instead (only serves paths
@@ -24,12 +72,14 @@ function escapeHtml(s) {
 
 function render(filterText) {
   const needle = filterText.trim().toLowerCase();
-  const rows = albums.filter(
-    (a) =>
+  const rows = albums.filter((a) => {
+    const matchesSearch =
       !needle ||
       a.title.toLowerCase().includes(needle) ||
-      a.artists.join(" ").toLowerCase().includes(needle)
-  );
+      a.artists.join(" ").toLowerCase().includes(needle);
+    const matchesGroup = selectedGroup === null || groupValues(a, groupField).includes(selectedGroup);
+    return matchesSearch && matchesGroup;
+  });
   rows.sort((a, b) => {
     const va = Array.isArray(a[sortKey]) ? a[sortKey].join(", ") : a[sortKey];
     const vb = Array.isArray(b[sortKey]) ? b[sortKey].join(", ") : b[sortKey];
@@ -131,8 +181,14 @@ async function loadCollection(path) {
     const resp = await invoke("list_albums", { path });
     albums = resp.albums;
     imagesDir = resp.images_dir;
-    currentPath = path;
+    // The command's own echoed-back path, never null — add_album/
+    // edit_album/delete_album require a concrete path, and the initial
+    // load passes path=null (meaning "use the bundled sample-collection"),
+    // which resp.path resolves to a real path.
+    currentPath = resp.path;
     document.getElementById("detail").hidden = true;
+    selectedGroup = null;
+    renderGroups();
     render(document.getElementById("search").value);
   } catch (err) {
     document.getElementById("count").textContent = `Error: ${err}`;
