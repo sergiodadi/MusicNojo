@@ -5,7 +5,7 @@ use music_collector_export::{
     load_albums, open_readonly, open_writable, resolve_db_path, Album, AlbumFields,
     Connection, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
 };
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
 /// Path to the bundled fictional sample-collection, used when the user
@@ -59,16 +59,24 @@ fn list_albums(app: tauri::AppHandle, path: Option<String>) -> Result<AlbumsResp
     Ok(AlbumsResponse { albums, images_dir })
 }
 
-/// Native folder picker for a .mucp package. Blocking, called from the
-/// UI thread via invoke() — fine here since this is a short-lived modal
-/// dialog, not a long-running operation.
+/// Native folder picker for a .mucp package. Uses the dialog plugin's
+/// async callback form, not `blocking_pick_folder()` — that one blocks
+/// the calling thread waiting on the native panel, which on macOS must
+/// run on the main thread; called from a Tauri command (off the main
+/// thread) this deadlocks instead of returning (observed: the window
+/// never regains control, spinning cursor). The chosen path is sent to
+/// the frontend as a "collection-picked" event, since the picker itself
+/// is asynchronous — same pattern as BookNojo's own import dialog.
 #[tauri::command]
-fn pick_collection(app: tauri::AppHandle) -> Option<String> {
+fn pick_collection(app: tauri::AppHandle) {
     app.dialog()
         .file()
         .set_title("Open a Music Collector collection (.mucp)")
-        .blocking_pick_folder()
-        .map(|p| p.to_string())
+        .pick_folder(move |folder| {
+            if let Some(folder) = folder {
+                let _ = app.emit("collection-picked", folder.to_string());
+            }
+        });
 }
 
 /// Shared by add/edit/delete: refuses the real collection (same rule as

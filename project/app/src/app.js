@@ -139,11 +139,15 @@ async function loadCollection(path) {
   }
 }
 
-document.getElementById("open-collection").addEventListener("click", async () => {
-  const path = await invoke("pick_collection");
-  if (path) {
-    await loadCollection(path);
-  }
+window.__TAURI__.event.listen("collection-picked", (event) => {
+  loadCollection(event.payload);
+});
+
+document.getElementById("open-collection").addEventListener("click", () => {
+  // Fire-and-forget: the dialog is async on the Rust side, and its
+  // result arrives later as a "collection-picked" event (see above),
+  // not as this invoke()'s return value.
+  invoke("pick_collection");
 });
 
 // --- Add/Edit/Delete -------------------------------------------------
