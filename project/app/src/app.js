@@ -4,6 +4,8 @@ let albums = [];
 let sortKey = "title";
 let sortAsc = true;
 let imagesDir = "";
+let currentPath = null;
+let currentDetailId = null;
 
 // The WebView's security sandbox blocks raw file:// loads, so cover
 // images go through Tauri's asset protocol instead (only serves paths
@@ -64,6 +66,7 @@ function field(label, value) {
 }
 
 function showDetail(id) {
+  currentDetailId = id;
   const a = albums.find((x) => x.id === id);
   if (!a) return;
 
@@ -128,6 +131,7 @@ async function loadCollection(path) {
     const resp = await invoke("list_albums", { path });
     albums = resp.albums;
     imagesDir = resp.images_dir;
+    currentPath = path;
     document.getElementById("detail").hidden = true;
     render(document.getElementById("search").value);
   } catch (err) {
@@ -139,6 +143,187 @@ document.getElementById("open-collection").addEventListener("click", async () =>
   const path = await invoke("pick_collection");
   if (path) {
     await loadCollection(path);
+  }
+});
+
+// --- Add/Edit/Delete -------------------------------------------------
+
+const dialog = document.getElementById("album-form-dialog");
+const form = document.getElementById("album-form");
+const formError = document.getElementById("album-form-error");
+
+function splitList(value) {
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function emptyRoleInputs() {
+  return {
+    artist: [],
+    composer: [],
+    conductor: [],
+    musician: [],
+    orchestra: [],
+    chorus: [],
+  };
+}
+
+function emptyManyToManyInputs() {
+  return { genre: [], tag: [], extra: [], studio: [] };
+}
+
+function emptyAlbumFields() {
+  return {
+    format: null,
+    label: null,
+    country: null,
+    condition: null,
+    packaging: null,
+    vinyl_color: null,
+    spars: null,
+    owner: null,
+    location: null,
+    release_year: null,
+    rating: null,
+    notes: null,
+    upc: null,
+  };
+}
+
+function openAddForm() {
+  form.reset();
+  document.getElementById("album-form-title").textContent = "Add Album";
+  form.dataset.mode = "add";
+  formError.textContent = "";
+  dialog.showModal();
+}
+
+function openEditForm(a) {
+  form.reset();
+  document.getElementById("album-form-title").textContent = "Edit Album";
+  form.dataset.mode = "edit";
+  form.dataset.id = a.id;
+  formError.textContent = "";
+  form.elements.title.value = a.title;
+  form.elements.artists.value = a.artists.join(", ");
+  form.elements.composers.value = a.composers.join(", ");
+  form.elements.conductors.value = a.conductors.join(", ");
+  form.elements.musicians.value = a.musicians.join(", ");
+  form.elements.orchestras.value = a.orchestras.join(", ");
+  form.elements.choruses.value = a.choruses.join(", ");
+  form.elements.genres.value = a.genres.join(", ");
+  form.elements.tags.value = a.tags.join(", ");
+  form.elements.extras.value = a.extras.join(", ");
+  form.elements.studios.value = a.studios.join(", ");
+  form.elements.format.value = a.format ?? "";
+  form.elements.label.value = a.label ?? "";
+  form.elements.country.value = a.country ?? "";
+  form.elements.release_year.value = a.release_year ?? "";
+  form.elements.rating.value = a.rating ?? "";
+  form.elements.upc.value = a.upc ?? "";
+  form.elements.notes.value = a.notes ?? "";
+  form.elements.tracks.value = a.discs.flatMap((d) => d.tracks.map((t) => t.title)).join("\n");
+  dialog.showModal();
+}
+
+document.getElementById("add-album").addEventListener("click", openAddForm);
+document.getElementById("album-form-cancel").addEventListener("click", () => dialog.close());
+
+document.getElementById("detail-edit").addEventListener("click", () => {
+  const a = albums.find((x) => x.id === currentDetailId);
+  if (a) openEditForm(a);
+});
+
+document.getElementById("detail-delete").addEventListener("click", async () => {
+  const a = albums.find((x) => x.id === currentDetailId);
+  if (!a) return;
+  if (!confirm(`Delete "${a.title}"? This cannot be undone (a backup is made first).`)) return;
+  try {
+    await invoke("delete_album", { path: currentPath, id: a.id });
+    document.getElementById("detail").hidden = true;
+    await loadCollection(currentPath);
+  } catch (err) {
+    alert(`Delete failed: ${err}`);
+  }
+});
+
+form.addEventListener("submit", async (e) => {
+  // method="dialog" closes the dialog natively on submit unless this
+  // runs first — we want to stay open on failure (to show the error).
+  e.preventDefault();
+  formError.textContent = "";
+  const data = new FormData(form);
+  const roles = emptyRoleInputs();
+  roles.artist = splitList(data.get("artists"));
+  roles.composer = splitList(data.get("composers"));
+  roles.conductor = splitList(data.get("conductors"));
+  roles.musician = splitList(data.get("musicians"));
+  roles.orchestra = splitList(data.get("orchestras"));
+  roles.chorus = splitList(data.get("choruses"));
+
+  const many = emptyManyToManyInputs();
+  many.genre = splitList(data.get("genres"));
+  many.tag = splitList(data.get("tags"));
+  many.extra = splitList(data.get("extras"));
+  many.studio = splitList(data.get("studios"));
+
+  const fields = emptyAlbumFields();
+  fields.format = data.get("format") || null;
+  fields.label = data.get("label") || null;
+  fields.country = data.get("country") || null;
+  fields.release_year = data.get("release_year") || null;
+  fields.rating = data.get("rating") ? Number(data.get("rating")) : null;
+  fields.upc = data.get("upc") || null;
+  fields.notes = data.get("notes") || null;
+
+  const tracks = data
+    .get("tracks")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  try {
+    if (form.dataset.mode === "edit") {
+      const id = Number(form.dataset.id);
+      await invoke("edit_album", {
+        path: currentPath,
+        id,
+        title: data.get("title"),
+        fields,
+        replace: {
+          replace_artists: true,
+          replace_composers: true,
+          replace_conductors: true,
+          replace_musicians: true,
+          replace_orchestras: true,
+          replace_choruses: true,
+        },
+        roles,
+        replaceMany: {
+          replace_genres: true,
+          replace_tags: true,
+          replace_extras: true,
+          replace_studios: true,
+        },
+        many,
+      });
+    } else {
+      await invoke("add_album", {
+        path: currentPath,
+        title: data.get("title"),
+        roles,
+        many,
+        fields,
+        tracks,
+      });
+    }
+    dialog.close();
+    document.getElementById("detail").hidden = true;
+    await loadCollection(currentPath);
+  } catch (err) {
+    formError.textContent = String(err);
   }
 });
 

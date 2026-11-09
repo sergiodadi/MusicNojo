@@ -134,3 +134,92 @@ tr:hover td {
   font-size: 0.85rem;
   color: #444;
 }
+
+#detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+}
+
+#detail-actions button {
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+#add-album {
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+dialog {
+  border: none;
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  padding: 0;
+  width: 28rem;
+  max-height: 85vh;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+#album-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.25rem;
+  overflow-y: auto;
+  max-height: 85vh;
+}
+
+#album-form h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+}
+
+#album-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: #444;
+  gap: 0.2rem;
+}
+
+#album-form input,
+#album-form textarea {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+#album-form .row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#album-form .row label {
+  flex: 1;
+}
+
+#album-form menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0.5rem 0 0 0;
+  padding: 0;
+}
+
+#album-form menu button {
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
+.error {
+  color: #b00020;
+  font-size: 0.85rem;
+  min-height: 1.1em;
+}

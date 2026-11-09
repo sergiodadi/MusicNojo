@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use rusqlite::Connection;
+pub use rusqlite::Connection;
 use serde::Serialize;
 
 // Core Data entity ids for the Collectible-family hierarchy
@@ -78,6 +78,14 @@ pub fn open_readonly(db: &Path) -> Result<Connection> {
     let db_path = resolve_db_path(db);
     Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
         .with_context(|| format!("ouverture de {}", db_path.display()))
+}
+
+/// Opens a `.mucp` package (or its `Music_data` file directly) for
+/// writing. Exposed so callers (the app) don't need their own `rusqlite`
+/// dependency just to open a connection.
+pub fn open_writable(db: &Path) -> Result<Connection> {
+    let db_path = resolve_db_path(db);
+    Connection::open(&db_path).with_context(|| format!("ouverture de {}", db_path.display()))
 }
 
 pub fn resolve_db_path(path: &Path) -> std::path::PathBuf {
@@ -1025,11 +1033,19 @@ pub fn backup_database(db_path: &Path) -> Result<PathBuf> {
         .map(|p| p.join("backups"))
         .unwrap_or_else(|| PathBuf::from("backups"));
     std::fs::create_dir_all(&backups_dir)?;
+    // Nanoseconds, not seconds: successive writes within the same second
+    // (e.g. add then immediately edit) would otherwise collide on the
+    // same filename and silently overwrite each other's backup.
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs();
-    let backup_path = backups_dir.join(format!("Music_data.{timestamp}.bak"));
+        .as_nanos();
+    let mut backup_path = backups_dir.join(format!("Music_data.{timestamp}.bak"));
+    let mut suffix = 0;
+    while backup_path.exists() {
+        suffix += 1;
+        backup_path = backups_dir.join(format!("Music_data.{timestamp}-{suffix}.bak"));
+    }
     std::fs::copy(db_path, &backup_path)
         .with_context(|| format!("sauvegarde de {}", db_path.display()))?;
     Ok(backup_path)
