@@ -3,15 +3,16 @@
 > 🇬🇧 [Read in English](MANUAL.md)
 
 Ce document explique comment utiliser l'application macOS
-**MusicNojo** une fois installée. Pas encore de version
-téléchargeable — pour la compiler depuis les sources, voir
-[`BUILD.fr.md`](BUILD.fr.md).
+**MusicNojo** une fois installée. Pour la télécharger, voir
+[`README.fr.md`](README.fr.md) ; pour la compiler depuis les sources,
+voir [`BUILD.fr.md`](BUILD.fr.md).
 
 ## 1. Ouvrir une collection
 
-- **"Ouvrir une collection…"** ouvre le sélecteur de fichier natif
-  macOS pour choisir une collection `.mucp`. Le sélecteur n'accepte que
-  les fichiers `.mucp`.
+- **"Ouvrir une collection…"** (dans l'en-tête, ou Fichier → Ouvrir
+  une collection… dans la barre de menus) ouvre le sélecteur de
+  fichier natif macOS pour choisir une collection `.mucp`. Le
+  sélecteur n'accepte que les fichiers `.mucp`.
 - Au tout premier lancement, avant d'avoir rien ouvert, MusicNojo
   affiche une collection d'exemple intégrée, entièrement fictive (12
   albums inventés, aucune donnée personnelle) — il y a donc toujours
@@ -88,6 +89,10 @@ téléchargeable — pour la compiler depuis les sources, voir
   d'ajout/modification — entre l'anglais et le français. Le choix est
   mémorisé d'une session à l'autre (tout comme la taille de la mise en
   page choisie).
+- Les messages renvoyés par l'application elle-même après une action
+  (confirmations, erreurs) restent en français quelle que soit la
+  langue choisie — seule l'interface générée par le navigateur est
+  traduite pour l'instant.
 
 ## 5. Sécurité des données
 
