@@ -99,6 +99,12 @@ const I18N = {
     form_tracks_placeholder: "One track title per line",
     form_cancel: "Cancel",
     form_save: "Save",
+    add_preview_confirm: "Confirm and add",
+    add_preview_heading: 'New values for "{title}"',
+    add_preview_new_count: "{n} new value(s) will be created.",
+    add_preview_no_new: "No new values — everything already matches the collection.",
+    add_preview_no_fields: "No list-type fields filled in.",
+    add_preview_new_badge: "new",
     stats_title: "Statistics — {name}",
     stats_albums: "{n} album(s)",
     stats_tracks: "{n} track(s)",
@@ -192,6 +198,12 @@ const I18N = {
     form_tracks_placeholder: "Un titre de piste par ligne",
     form_cancel: "Annuler",
     form_save: "Enregistrer",
+    add_preview_confirm: "Confirmer l'ajout",
+    add_preview_heading: 'Nouvelles valeurs pour « {title} »',
+    add_preview_new_count: "{n} nouvelle(s) valeur(s) seront créées.",
+    add_preview_no_new: "Aucune nouvelle valeur — tout correspond déjà à la collection.",
+    add_preview_no_fields: "Aucun champ de type liste rempli.",
+    add_preview_new_badge: "nouveau",
     stats_title: "Statistiques — {name}",
     stats_albums: "{n} album(s)",
     stats_tracks: "{n} piste(s)",
@@ -1038,48 +1050,103 @@ form.addEventListener("submit", async (e) => {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
-  try {
-    if (form.dataset.mode === "edit") {
-      const id = Number(form.dataset.id);
-      await invoke("edit_album", {
-        path: currentPath,
-        id,
-        title: data.get("title"),
-        fields,
-        replace: {
-          replace_artists: true,
-          replace_composers: true,
-          replace_conductors: true,
-          replace_musicians: true,
-          replace_orchestras: true,
-          replace_choruses: true,
-        },
-        roles,
-        replaceMany: {
-          replace_genres: true,
-          replace_tags: true,
-          replace_extras: true,
-          replace_studios: true,
-        },
-        many,
-      });
-    } else {
-      await invoke("add_album", {
-        path: currentPath,
-        title: data.get("title"),
-        roles,
-        many,
-        fields,
-        tracks,
-      });
+  const title = data.get("title");
+
+  const commit = async () => {
+    try {
+      if (form.dataset.mode === "edit") {
+        const id = Number(form.dataset.id);
+        await invoke("edit_album", {
+          path: currentPath,
+          id,
+          title,
+          fields,
+          replace: {
+            replace_artists: true,
+            replace_composers: true,
+            replace_conductors: true,
+            replace_musicians: true,
+            replace_orchestras: true,
+            replace_choruses: true,
+          },
+          roles,
+          replaceMany: {
+            replace_genres: true,
+            replace_tags: true,
+            replace_extras: true,
+            replace_studios: true,
+          },
+          many,
+        });
+      } else {
+        await invoke("add_album", {
+          path: currentPath,
+          title,
+          roles,
+          many,
+          fields,
+          tracks,
+        });
+      }
+      dialog.close();
+      clearDetail();
+      await loadCollection(currentPath);
+    } catch (err) {
+      formError.textContent = String(err);
     }
-    dialog.close();
-    clearDetail();
-    await loadCollection(currentPath);
+  };
+
+  // Only "add" gets a preview — matches BookNojo's own scope. Catches a
+  // typo (e.g. a near-duplicate artist/genre spelling) before it becomes
+  // a permanent new taxonomy entry, by showing what would be newly
+  // created and requiring a second confirmation before the real write.
+  if (form.dataset.mode === "edit") {
+    await commit();
+    return;
+  }
+  try {
+    const preview = await invoke("prepare_add_album", { path: currentPath, title, roles, many, fields });
+    showAddPreview(preview, commit);
   } catch (err) {
     formError.textContent = String(err);
   }
 });
+
+function showAddPreview(preview, onConfirm) {
+  const items = preview.fields
+    .map(
+      (f) =>
+        `<li>${f.is_new ? `<span class="new-badge">${escapeHtml(t("add_preview_new_badge"))}</span>` : ""}<strong>${escapeHtml(f.label)}</strong>: ${escapeHtml(f.value)}</li>`
+    )
+    .join("");
+  document.getElementById("add-preview-title").textContent = t("add_preview_heading", { title: preview.title });
+  document.getElementById("add-preview-summary").textContent =
+    preview.new_count > 0 ? t("add_preview_new_count", { n: preview.new_count }) : t("add_preview_no_new");
+  document.getElementById("add-preview-list").innerHTML =
+    items || `<li>${escapeHtml(t("add_preview_no_fields"))}</li>`;
+
+  const previewDialog = document.getElementById("add-preview-dialog");
+  const confirmBtn = document.getElementById("add-preview-confirm");
+  const cancelBtn = document.getElementById("add-preview-cancel");
+
+  const onConfirmClick = async () => {
+    cleanup();
+    previewDialog.close();
+    await onConfirm();
+  };
+  const onCancelClick = () => {
+    cleanup();
+    previewDialog.close();
+  };
+  function cleanup() {
+    confirmBtn.removeEventListener("click", onConfirmClick);
+    cancelBtn.removeEventListener("click", onCancelClick);
+  }
+  confirmBtn.addEventListener("click", onConfirmClick);
+  cancelBtn.addEventListener("click", onCancelClick);
+
+  previewDialog.showModal();
+}
 
 // --- Draggable splitters (groups|rest, and list|detail) ---------------
 // Same approach as BookNojo's own app: a drag handle tracks mousemove

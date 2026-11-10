@@ -1396,6 +1396,145 @@ fn scalar_text_assignments(fields: &AlbumFields) -> Vec<(&'static str, String)> 
     out
 }
 
+/// One field of an `AddAlbumPreview` — a single artist/genre/format/...
+/// value the user typed, and whether it already exists in the
+/// collection or would be created brand-new.
+#[derive(Debug, Serialize)]
+pub struct ResolvedFieldSummary {
+    pub label: String,
+    pub value: String,
+    pub is_new: bool,
+}
+
+/// Preview returned to the app's confirmation step before any write —
+/// which values (if any) a `build_plan` call with these same inputs
+/// would create as brand-new taxonomy entries. Same purpose as
+/// BookNojo's own `prepare_add_book`/`AddBookPreview`: catch a typo
+/// (an unintended near-duplicate artist/genre/...) before it becomes a
+/// permanent entry, by showing it before the real write happens.
+#[derive(Debug, Serialize)]
+pub struct AddAlbumPreview {
+    pub title: String,
+    pub fields: Vec<ResolvedFieldSummary>,
+    pub new_count: usize,
+}
+
+fn person_exists(conn: &Connection, person_table: &str, name: &str) -> bool {
+    conn.query_row(
+        &format!(
+            "SELECT pt.Z_PK FROM {person_table} pt \
+             JOIN ZPERSONDELEGATE p ON p.Z_PK = pt.ZDELEGATE \
+             WHERE p.ZDISPLAYNAME = ?1"
+        ),
+        [name],
+        |row| row.get::<_, i64>(0),
+    )
+    .is_ok()
+}
+
+fn simple_lookup_exists(conn: &Connection, table: &str, name: &str) -> bool {
+    conn.query_row(
+        &format!(
+            "SELECT t.Z_PK FROM {table} t \
+             JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE \
+             WHERE l.ZDISPLAYNAME = ?1"
+        ),
+        [name],
+        |row| row.get::<_, i64>(0),
+    )
+    .is_ok()
+}
+
+fn role_label(key: &'static str) -> &'static str {
+    match key {
+        "artist" => "Artist",
+        "composer" => "Composer",
+        "conductor" => "Conductor",
+        "musician" => "Musician",
+        "orchestra" => "Orchestra",
+        "chorus" => "Chorus",
+        _ => key,
+    }
+}
+
+fn many_to_many_label(key: &'static str) -> &'static str {
+    match key {
+        "genre" => "Genre",
+        "tag" => "Tag",
+        "extra" => "Extra",
+        "studio" => "Studio",
+        _ => key,
+    }
+}
+
+/// Read-only: resolves `roles`/`many`/`fields` against `conn` exactly as
+/// `build_plan` would, but only to report which values are new versus
+/// already-existing — never allocates a row or writes anything. Plain
+/// text/number fields (release_year, rating, notes, upc) are skipped —
+/// they can't create unwanted taxonomy entries, so there's nothing to
+/// flag about them.
+pub fn preview_add_album(
+    conn: &Connection,
+    title: &str,
+    roles: &RoleInputs,
+    many: &ManyToManyInputs,
+    fields: &AlbumFields,
+) -> Result<AddAlbumPreview> {
+    let mut summary = Vec::new();
+
+    for spec in ROLE_SPECS {
+        for name in roles.get(spec.key) {
+            summary.push(ResolvedFieldSummary {
+                label: role_label(spec.key).to_string(),
+                value: name.clone(),
+                is_new: !person_exists(conn, spec.person_table, name),
+            });
+        }
+    }
+    for spec in MANY_TO_MANY_SPECS {
+        for name in many.get(spec.key) {
+            summary.push(ResolvedFieldSummary {
+                label: many_to_many_label(spec.key).to_string(),
+                value: name.clone(),
+                is_new: !simple_lookup_exists(conn, spec.target_table, name),
+            });
+        }
+    }
+    macro_rules! simple {
+        ($field:expr, $label:literal, $table:literal) => {
+            if let Some(name) = $field.as_deref() {
+                summary.push(ResolvedFieldSummary {
+                    label: $label.to_string(),
+                    value: name.to_string(),
+                    is_new: !simple_lookup_exists(conn, $table, name),
+                });
+            }
+        };
+    }
+    simple!(fields.format, "Format", "ZFORMAT");
+    simple!(fields.label, "Label", "ZLABEL");
+    simple!(fields.country, "Country", "ZCOUNTRY");
+    simple!(fields.condition, "Condition", "ZCONDITION");
+    simple!(fields.packaging, "Packaging", "ZPACKAGING");
+    simple!(fields.vinyl_color, "Vinyl color", "ZVINYLCOLOR");
+    simple!(fields.spars, "Spars", "ZSPARS");
+    simple!(fields.location, "Location", "ZLOCATION");
+    if let Some(name) = fields.owner.as_deref() {
+        summary.push(ResolvedFieldSummary {
+            label: "Owner".to_string(),
+            value: name.to_string(),
+            is_new: !person_exists(conn, "ZOWNER", name),
+        });
+    }
+
+    let new_count = summary.iter().filter(|f| f.is_new).count();
+    Ok(AddAlbumPreview {
+        title: title.to_string(),
+        fields: summary,
+        new_count,
+    })
+}
+
 pub fn build_plan(
     conn: &Connection,
     title: &str,

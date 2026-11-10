@@ -579,6 +579,65 @@ dialog::backdrop {
   cursor: pointer;
 }
 
+#add-preview-dialog {
+  padding: 1.25rem;
+}
+
+#add-preview-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.1rem;
+}
+
+#add-preview-summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: #444;
+}
+
+#add-preview-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  max-height: 20rem;
+  overflow-y: auto;
+  font-size: 0.85rem;
+}
+
+#add-preview-list li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #f0f0f2;
+}
+
+#add-preview-list li:last-child {
+  border-bottom: none;
+}
+
+.new-badge {
+  display: inline-block;
+  background: #e8edfc;
+  color: #2e5bd7;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  margin-right: 0.4rem;
+}
+
+#add-preview-dialog menu {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+#add-preview-dialog menu button {
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+}
+
 .error {
   color: #b00020;
   font-size: 0.85rem;

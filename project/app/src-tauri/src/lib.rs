@@ -2,8 +2,9 @@ use std::path::Path;
 
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
-    load_albums, open_readonly, open_writable, resolve_db_path, set_cover, Album, AlbumFields,
-    Connection, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
+    load_albums, open_readonly, open_writable, preview_add_album, resolve_db_path, set_cover,
+    AddAlbumPreview, Album, AlbumFields, Connection, ManyToManyInputs, ManyToManyReplaceFlags,
+    RoleInputs, RoleReplaceFlags,
 };
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
@@ -163,6 +164,23 @@ fn open_for_write(path: &str) -> Result<Connection, String> {
     ensure_not_real_collection(&db_path).map_err(|e| e.to_string())?;
     backup_database(&db_path).map_err(|e| e.to_string())?;
     open_writable(&db_path).map_err(|e| e.to_string())
+}
+
+/// Read-only half of the "Add Album" flow, called before `add_album`
+/// actually writes anything — lets the form show which artists/genres/
+/// etc. would be newly created, same purpose as BookNojo's own
+/// `prepare_add_book`.
+#[tauri::command]
+fn prepare_add_album(
+    path: String,
+    title: String,
+    roles: RoleInputs,
+    many: ManyToManyInputs,
+    fields: AlbumFields,
+) -> Result<AddAlbumPreview, String> {
+    let db_path = resolve_db_path(Path::new(&path));
+    let conn = open_readonly(&db_path).map_err(|e| e.to_string())?;
+    preview_add_album(&conn, &title, &roles, &many, &fields).map_err(|e| e.to_string())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -345,6 +363,7 @@ pub fn run() {
             list_albums,
             pick_collection,
             pick_and_set_cover,
+            prepare_add_album,
             add_album,
             edit_album,
             delete_album,
