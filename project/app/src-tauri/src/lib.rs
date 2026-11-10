@@ -92,22 +92,33 @@ fn list_albums(app: tauri::AppHandle, path: Option<String>) -> Result<AlbumsResp
     })
 }
 
-/// Native folder picker for a .mucp package. Uses the dialog plugin's
-/// async callback form, not `blocking_pick_folder()` — that one blocks
-/// the calling thread waiting on the native panel, which on macOS must
-/// run on the main thread; called from a Tauri command (off the main
+/// Native picker for a .mucp package. Uses the dialog plugin's async
+/// callback form, not `blocking_pick_file()` — that one blocks the
+/// calling thread waiting on the native panel, which on macOS must run
+/// on the main thread; called from a Tauri command (off the main
 /// thread) this deadlocks instead of returning (observed: the window
 /// never regains control, spinning cursor). The chosen path is sent to
 /// the frontend as a "collection-picked" event, since the picker itself
 /// is asynchronous — same pattern as BookNojo's own import dialog.
+///
+/// `pick_file`, not `pick_folder`: macOS's Launch Services knows `.mucp`
+/// is a package (registered by Music Collector.app itself) and
+/// NSOpenPanel treats a recognized package as a *file*, not a folder —
+/// a folder-only picker (`canChooseFiles: false`, what `pick_folder`
+/// sets) grays it out entirely (user-reported: "MyCollection.mucp ...
+/// c'est grisé"). `pick_file` with an extension filter lets the package
+/// be selected as a single atomic item, matching how Finder normally
+/// handles package-style bundles — same fix BookNojo already uses for
+/// its own `.bkcp` picker.
 #[tauri::command]
 fn pick_collection(app: tauri::AppHandle) {
     app.dialog()
         .file()
         .set_title("Open a Music Collector collection (.mucp)")
-        .pick_folder(move |folder| {
-            if let Some(folder) = folder {
-                let _ = app.emit("collection-picked", folder.to_string());
+        .add_filter("Collection", &["mucp"])
+        .pick_file(move |file| {
+            if let Some(file) = file {
+                let _ = app.emit("collection-picked", file.to_string());
             }
         });
 }
