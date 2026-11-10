@@ -406,7 +406,9 @@ tr:hover td {
 }
 
 #detail-content .cover {
-  width: 100%;
+  width: 220px;
+  height: 220px;
+  object-fit: cover;
   border-radius: 4px;
   margin-bottom: 0.75rem;
 }

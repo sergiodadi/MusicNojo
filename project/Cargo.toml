@@ -1,6 +1,6 @@
 [package]
 name = "music_collector_export"
-version = "0.29.0"
+version = "0.30.0"
 edition = "2021"
 license = "MIT"
 
@@ -26,6 +26,8 @@ clap = { version = "4", features = ["derive"] }
 
 [dev-dependencies]
 # Only for examples/generate_sample_collection.rs's placeholder covers
-# (plain synthetic colors, never real artwork) — not needed by the
-# actual CLI tools.
+# (synthetic color + simple shapes + the album's own title/artist text,
+# never real artwork) — not needed by the actual CLI tools.
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+imageproc = "0.25"
+ab_glyph = "0.2"
