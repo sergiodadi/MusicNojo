@@ -11,6 +11,9 @@ let selectedGroup = null;
 let selectedLetter = null;
 let panel = "library"; // 'library' | 'stats'
 let viewMode = "list"; // 'list' | 'grid'
+let collCounts = new Map();
+let collectionsList = [];
+let currentCollection = null;
 
 // --- i18n ---------------------------------------------------------------
 // Mirrors BookNojo's own t()/setLang() pattern: everything user-visible
@@ -26,6 +29,7 @@ const I18N = {
     count_albums: "{n} album(s)",
     group_all: "All",
     azbar_all: "All",
+    collection_default: "My Collection",
     opt_group_artists: "Artist",
     opt_group_genres: "Genre",
     opt_group_format: "Format",
@@ -92,7 +96,7 @@ const I18N = {
     form_tracks_placeholder: "One track title per line",
     form_cancel: "Cancel",
     form_save: "Save",
-    stats_title: "Statistics",
+    stats_title: "Statistics — {name}",
     stats_albums: "{n} album(s)",
     stats_tracks: "{n} track(s)",
     stats_no_cover: "{n} with no cover",
@@ -113,6 +117,7 @@ const I18N = {
     count_albums: "{n} album(s)",
     group_all: "Tous",
     azbar_all: "Tout",
+    collection_default: "Ma collection",
     opt_group_artists: "Artiste",
     opt_group_genres: "Genre",
     opt_group_format: "Format",
@@ -179,7 +184,7 @@ const I18N = {
     form_tracks_placeholder: "Un titre de piste par ligne",
     form_cancel: "Annuler",
     form_save: "Enregistrer",
-    stats_title: "Statistiques",
+    stats_title: "Statistiques — {name}",
     stats_albums: "{n} album(s)",
     stats_tracks: "{n} piste(s)",
     stats_no_cover: "{n} sans pochette",
@@ -253,6 +258,7 @@ function setLang(lang) {
   }
   updateLangToggleUI();
   applyStaticLabels();
+  renderTabs();
   renderGroups();
   render(document.getElementById("search").value);
   if (currentDetailId !== null) showDetail(currentDetailId);
@@ -285,6 +291,68 @@ async function updateVersionBadge() {
   }
 }
 
+// A stable (non-translated) key to filter/group by — an album with no
+// Music Collector sub-collection set (ZCOLLECTION is nullable) still
+// needs one to live under. Kept separate from the *displayed* label
+// (collectionLabel below) so a language switch can't desync
+// currentCollection from the just-retranslated label it used to match.
+const DEFAULT_COLLECTION_KEY = "__default__";
+function collectionKey(album) {
+  return album.collection || DEFAULT_COLLECTION_KEY;
+}
+function collectionLabel(key) {
+  return key === DEFAULT_COLLECTION_KEY ? t("collection_default") : key;
+}
+
+// One tab per sub-collection (Music Collector's own "Collections"
+// feature — e.g. "My Music" plus any the user created), largest first,
+// ties broken alphabetically — same ordering as BookNojo's own tabs.
+// Recomputed once per load, not per render, since the set of
+// sub-collections doesn't change just from filtering/sorting.
+function computeCollections() {
+  collCounts = new Map();
+  for (const a of albums) {
+    const key = collectionKey(a);
+    collCounts.set(key, (collCounts.get(key) ?? 0) + 1);
+  }
+  collectionsList = [...collCounts.keys()].sort(
+    (a, b) => collCounts.get(b) - collCounts.get(a) || collectionLabel(a).localeCompare(collectionLabel(b))
+  );
+  currentCollection = collectionsList[0] ?? null;
+}
+
+function renderTabs() {
+  const el = document.getElementById("tabs");
+  el.innerHTML = "";
+  for (const key of collectionsList) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (key === currentCollection ? " active" : "");
+    const label = document.createElement("span");
+    label.textContent = collectionLabel(key);
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = collCounts.get(key);
+    tab.appendChild(label);
+    tab.appendChild(n);
+    tab.addEventListener("click", () => switchCollection(key));
+    el.appendChild(tab);
+  }
+}
+
+function switchCollection(name) {
+  if (name === currentCollection) return;
+  currentCollection = name;
+  selectedGroup = null;
+  selectedLetter = null;
+  page = 1;
+  const searchEl = document.getElementById("search");
+  searchEl.value = "";
+  renderTabs();
+  renderGroups();
+  render("");
+  if (panel === "stats") renderStats();
+}
+
 // Scalar fields (format/country/label) and array fields (artists/
 // genres) both need to behave like "this album belongs to these
 // group values" — scalars are wrapped as a single-element list.
@@ -304,6 +372,7 @@ function letterOf(value) {
 function computeAvailableLetters() {
   const set = new Set();
   for (const a of albums) {
+    if (collectionKey(a) !== currentCollection) continue;
     for (const v of groupValues(a, groupField)) {
       if (v) set.add(letterOf(v));
     }
@@ -340,7 +409,10 @@ function renderAzBar() {
 function renderGroups() {
   renderAzBar();
   const counts = new Map();
+  let totalInCollection = 0;
   for (const a of albums) {
+    if (collectionKey(a) !== currentCollection) continue;
+    totalInCollection++;
     for (const v of groupValues(a, groupField)) {
       if (selectedLetter && letterOf(v) !== selectedLetter) continue;
       counts.set(v, (counts.get(v) ?? 0) + 1);
@@ -351,7 +423,7 @@ function renderGroups() {
   const list = document.getElementById("group-list");
   list.innerHTML =
     `<div class="${selectedGroup === null ? "selected" : ""}" data-group="">
-       <span>${escapeHtml(t("group_all"))}</span><span class="group-count">${albums.length}</span>
+       <span>${escapeHtml(t("group_all"))}</span><span class="group-count">${totalInCollection}</span>
      </div>` +
     sorted
       .map(
@@ -400,12 +472,13 @@ let page = 1;
 function render(filterText) {
   const needle = filterText.trim().toLowerCase();
   const rows = albums.filter((a) => {
+    const matchesCollection = collectionKey(a) === currentCollection;
     const matchesSearch =
       !needle ||
       a.title.toLowerCase().includes(needle) ||
       a.artists.join(" ").toLowerCase().includes(needle);
     const matchesGroup = selectedGroup === null || groupValues(a, groupField).includes(selectedGroup);
-    return matchesSearch && matchesGroup;
+    return matchesCollection && matchesSearch && matchesGroup;
   });
   rows.sort((a, b) => {
     const va = Array.isArray(a[sortKey]) ? a[sortKey].join(", ") : a[sortKey];
@@ -611,6 +684,8 @@ async function loadCollection(path) {
     selectedGroup = null;
     selectedLetter = null;
     page = 1;
+    computeCollections();
+    renderTabs();
     renderGroups();
     render(document.getElementById("search").value);
     if (panel === "stats") renderStats();
@@ -634,9 +709,10 @@ document.getElementById("open-collection").addEventListener("click", () => {
 // Mirrors BookNojo's own computeStats()/renderStats()/barList() pattern,
 // adapted to Album's fields instead of Book's.
 function computeStats() {
+  const scoped = albums.filter((a) => collectionKey(a) === currentCollection);
   const tally = (getter) => {
     const m = new Map();
-    for (const a of albums) {
+    for (const a of scoped) {
       for (const v of getter(a)) {
         if (v) m.set(v, (m.get(v) || 0) + 1);
       }
@@ -644,17 +720,17 @@ function computeStats() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   };
   const decades = new Map();
-  for (const a of albums) {
+  for (const a of scoped) {
     const y = parseInt(a.release_year, 10);
     if (!y) continue;
     const d = Math.floor(y / 10) * 10;
     decades.set(d, (decades.get(d) || 0) + 1);
   }
   return {
-    totalAlbums: albums.length,
-    totalTracks: albums.reduce((s, a) => s + (a.track_count || 0), 0),
-    noCover: albums.filter((a) => !a.front_cover).length,
-    noArtist: albums.filter((a) => !(a.artists && a.artists.length)).length,
+    totalAlbums: scoped.length,
+    totalTracks: scoped.reduce((s, a) => s + (a.track_count || 0), 0),
+    noCover: scoped.filter((a) => !a.front_cover).length,
+    noArtist: scoped.filter((a) => !(a.artists && a.artists.length)).length,
     genres: tally((a) => a.genres || []),
     formats: tally((a) => (a.format ? [a.format] : [])),
     countries: tally((a) => (a.country ? [a.country] : [])),
@@ -683,7 +759,7 @@ function renderStats() {
   const s = computeStats();
   document.getElementById("stats-pane").innerHTML = `
     <div class="stats-wrap">
-      <h2>${escapeHtml(t("stats_title"))}</h2>
+      <h2>${escapeHtml(t("stats_title", { name: collectionLabel(currentCollection) }))}</h2>
       <div class="stat-summary">
         <span>${t("stats_albums", { n: `<strong>${s.totalAlbums}</strong>` })}</span>
         <span>${t("stats_tracks", { n: `<strong>${s.totalTracks}</strong>` })}</span>
