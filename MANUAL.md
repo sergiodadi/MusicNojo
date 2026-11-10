@@ -14,6 +14,9 @@ source, see [`BUILD.md`](BUILD.md).
   an entirely fictional bundled sample collection (12 invented albums,
   no personal data) — so there's always something to see, without ever
   exposing real data by default.
+- Every later launch reopens the same collection, at the exact same
+  spot — active tab, grouping, search, sort, view, page and selected
+  album are all remembered.
 - The header always displays the name of the open file, a version
   badge, and an EN/FR language toggle.
 
@@ -51,17 +54,25 @@ source, see [`BUILD.md`](BUILD.md).
 
 - **Add an album**: a form covering every field (every role, every
   many-to-many field, every scalar field, and tracks — one per line).
+  Before anything is written, a preview lists every artist/genre/
+  format/... value that was typed, with a "new" badge on the ones that
+  don't already exist in the collection (catching a typo before it
+  becomes a permanent duplicate entry) — confirming it is what
+  actually adds the album. The new album joins whichever
+  sub-collection tab is currently active.
 - **Edit an album**: from its detail card, the same form opens
-  pre-filled with the current values.
+  pre-filled with the current values, and writes immediately (no
+  preview step). An album's sub-collection can't be changed this way
+  yet.
 - **Delete an album**: from its detail card, after a confirmation
   dialog.
 - After any add, edit or delete, the library is automatically
   reloaded: the change appears immediately, with no manual action
   needed.
-- There is no way yet, from the application, to set an album's
-  sub-collection or to pick which cover to use when *adding* an album
-  — only `set-cover` afterwards (via the statistics panel's "no
-  cover" list, or `mc_add set-cover` from the command line) sets one.
+- There is no way yet, from the application, to pick which cover to
+  use when *adding* an album — only `set-cover` afterwards (via the
+  statistics panel's "no cover" list, or `mc_add set-cover` from the
+  command line) sets one.
 
 ## 4. Bilingual interface
 
@@ -84,7 +95,8 @@ source, see [`BUILD.md`](BUILD.md).
 
 ## 6. What the application doesn't do yet
 
-- Setting an album's sub-collection or date-added, from the
+- Changing an album's sub-collection on *edit* (only *add* sets one,
+  from whichever tab is active), or setting its date-added, from the
   application or the command line.
 - Online lookup to pre-fill a record from a barcode/UPC or a Discogs/
   MusicBrainz match — not started.

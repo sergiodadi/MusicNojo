@@ -1692,6 +1692,7 @@ pub fn build_edit_plan(
         ("spars", "ZSPARS"),
         ("owner", "ZOWNER"),
         ("location", "ZLOCATION"),
+        ("collection", "ZCOLLECTION"),
     ] {
         if let Some(id) = lookup_ids.get(key) {
             assignments.push(format!("{column} = {id}"));

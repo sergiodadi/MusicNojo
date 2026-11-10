@@ -94,8 +94,10 @@ is the point — nothing is written until you do.
 many-to-many field (repeatable: `--genre`, `--tag`, `--extra`,
 `--studio`), every scalar field (`--format`, `--label`, `--country`,
 `--condition`, `--packaging`, `--vinyl-color`, `--spars`, `--owner`,
-`--location`, `--release-year`, `--rating`, `--notes`, `--upc`), and
-`--track` (repeatable, one per occurrence, in order).
+`--location`, `--release-year`, `--rating`, `--notes`, `--upc`,
+`--collection`), and `--track` (repeatable, one per occurrence, in
+order). `--collection` must name an already-existing sub-collection —
+it is never created.
 
 ### Editing — `edit-plan`
 
@@ -109,11 +111,13 @@ many-to-many field (repeatable: `--genre`, `--tag`, `--extra`,
 
 `--id` is the album's `Z_PK` (`mc_export`'s JSON output, field `"id"`).
 Every scalar/role/many-to-many flag from `add-plan` is available here
-too. A role or many-to-many field is only **replaced** if you pass its
-matching `--replace-*` flag (`--replace-artists`, `--replace-genres`,
-etc.) — otherwise the values you pass are ignored for that field and
-the existing ones are left untouched. There is no way yet to set an
-album's sub-collection or its date-added from the command line.
+too, including `--collection` (to move the album to a different
+already-existing sub-collection). A role or many-to-many field is
+only **replaced** if you pass its matching `--replace-*` flag
+(`--replace-artists`, `--replace-genres`, etc.) — otherwise the values
+you pass are ignored for that field and the existing ones are left
+untouched. There is no way yet to set an album's date-added from the
+command line.
 
 ### Deleting — `delete-plan`
 

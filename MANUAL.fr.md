@@ -17,6 +17,9 @@ téléchargeable — pour la compiler depuis les sources, voir
   albums inventés, aucune donnée personnelle) — il y a donc toujours
   quelque chose à voir, sans jamais exposer de vraies données par
   défaut.
+- Chaque lancement suivant rouvre la même collection, exactement là où
+  on l'avait laissée — onglet actif, regroupement, recherche, tri,
+  vue, page et album sélectionné sont tous mémorisés.
 - L'en-tête affiche toujours le nom du fichier ouvert, un badge de
   version, et une bascule de langue EN/FR.
 
@@ -56,18 +59,25 @@ téléchargeable — pour la compiler depuis les sources, voir
 
 - **Ajouter un album** : un formulaire couvrant chaque champ (chaque
   rôle, chaque champ many-to-many, chaque champ scalaire, et les
-  pistes — une par ligne).
+  pistes — une par ligne). Avant toute écriture, un aperçu liste
+  chaque valeur saisie (artiste, genre, format...) avec un badge
+  "nouveau" sur celles qui n'existent pas encore dans la collection
+  (pour repérer une faute de frappe avant qu'elle devienne une entrée
+  dupliquée permanente) — c'est la confirmation de cet aperçu qui
+  ajoute réellement l'album. Le nouvel album rejoint l'onglet de
+  sous-collection actif au moment de l'ajout.
 - **Modifier un album** : depuis sa fiche détail, le même formulaire
-  s'ouvre pré-rempli avec les valeurs actuelles.
+  s'ouvre pré-rempli avec les valeurs actuelles, et écrit
+  immédiatement (pas d'étape d'aperçu). La sous-collection d'un album
+  ne peut pas encore être changée de cette façon.
 - **Supprimer un album** : depuis sa fiche détail, après confirmation.
 - Après tout ajout, modification ou suppression, la bibliothèque se
   recharge automatiquement : le changement apparaît immédiatement,
   sans action manuelle nécessaire.
-- Il n'est pas encore possible, depuis l'application, de définir la
-  sous-collection d'un album ou de choisir une pochette au moment de
-  l'*ajout* — seul `set-cover` ensuite (via la liste "sans pochette"
-  du panneau de statistiques, ou `mc_add set-cover` en ligne de
-  commande) en définit une.
+- Il n'est pas encore possible, depuis l'application, de choisir une
+  pochette au moment de l'*ajout* — seul `set-cover` ensuite (via la
+  liste "sans pochette" du panneau de statistiques, ou
+  `mc_add set-cover` en ligne de commande) en définit une.
 
 ## 4. Interface bilingue
 
@@ -92,8 +102,9 @@ téléchargeable — pour la compiler depuis les sources, voir
 
 ## 6. Ce que l'application ne fait pas encore
 
-- Définir la sous-collection ou la date d'ajout d'un album, depuis
-  l'application ou la ligne de commande.
+- Changer la sous-collection d'un album en le modifiant (seul l'ajout
+  en définit une, celle de l'onglet actif), ou définir sa date
+  d'ajout, depuis l'application ou la ligne de commande.
 - Recherche en ligne pour pré-remplir une fiche à partir d'un
   code-barres/UPC ou d'une correspondance Discogs/MusicBrainz — pas
   commencé.

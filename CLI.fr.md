@@ -100,8 +100,10 @@ de plan, dans une seule transaction. Pouvoir relire le plan avant
 many-to-many (répétable : `--genre`, `--tag`, `--extra`, `--studio`),
 chaque champ scalaire (`--format`, `--label`, `--country`,
 `--condition`, `--packaging`, `--vinyl-color`, `--spars`, `--owner`,
-`--location`, `--release-year`, `--rating`, `--notes`, `--upc`), et
-`--track` (répétable, un par occurrence, dans l'ordre).
+`--location`, `--release-year`, `--rating`, `--notes`, `--upc`,
+`--collection`), et `--track` (répétable, un par occurrence, dans
+l'ordre). `--collection` doit nommer une sous-collection déjà
+existante — elle n'est jamais créée.
 
 ### Modifier — `edit-plan`
 
@@ -115,13 +117,13 @@ chaque champ scalaire (`--format`, `--label`, `--country`,
 
 `--id` est le `Z_PK` de l'album (sortie JSON de `mc_export`, champ
 `"id"`). Tous les paramètres scalaire/rôle/many-to-many de `add-plan`
-sont disponibles ici aussi. Un rôle ou un champ many-to-many n'est
-**remplacé** que si son option `--replace-*` correspondante est passée
-(`--replace-artists`, `--replace-genres`, etc.) — sinon les valeurs
-passées pour ce champ sont ignorées et les valeurs existantes restent
-inchangées. Il n'est pas encore possible de définir la
-sous-collection ou la date d'ajout d'un album depuis la ligne de
-commande.
+sont disponibles ici aussi, y compris `--collection` (pour déplacer
+l'album vers une autre sous-collection déjà existante). Un rôle ou un
+champ many-to-many n'est **remplacé** que si son option `--replace-*`
+correspondante est passée (`--replace-artists`, `--replace-genres`,
+etc.) — sinon les valeurs passées pour ce champ sont ignorées et les
+valeurs existantes restent inchangées. Il n'est pas encore possible de
+définir la date d'ajout d'un album depuis la ligne de commande.
 
 ### Supprimer — `delete-plan`
 
