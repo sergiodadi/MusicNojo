@@ -588,6 +588,16 @@ dialog::backdrop {
   font-size: 1.1rem;
 }
 
+#add-preview-collection {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2e4bb0;
+  background: #e8edfc;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+}
+
 #add-preview-summary {
   margin: 0 0 0.75rem;
   font-size: 0.85rem;

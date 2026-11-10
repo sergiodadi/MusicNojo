@@ -101,6 +101,7 @@ const I18N = {
     form_save: "Save",
     add_preview_confirm: "Confirm and add",
     add_preview_heading: 'New values for "{title}"',
+    add_preview_collection: "Will be added to: {collection}",
     add_preview_new_count: "{n} new value(s) will be created.",
     add_preview_no_new: "No new values — everything already matches the collection.",
     add_preview_no_fields: "No list-type fields filled in.",
@@ -200,6 +201,7 @@ const I18N = {
     form_save: "Enregistrer",
     add_preview_confirm: "Confirmer l'ajout",
     add_preview_heading: 'Nouvelles valeurs pour « {title} »',
+    add_preview_collection: "Sera ajouté à : {collection}",
     add_preview_new_count: "{n} nouvelle(s) valeur(s) seront créées.",
     add_preview_no_new: "Aucune nouvelle valeur — tout correspond déjà à la collection.",
     add_preview_no_fields: "Aucun champ de type liste rempli.",
@@ -1130,6 +1132,12 @@ function showAddPreview(preview, onConfirm) {
     )
     .join("");
   document.getElementById("add-preview-title").textContent = t("add_preview_heading", { title: preview.title });
+  // Shown prominently so a wrong active tab (easy to not notice) is
+  // caught here rather than after the album is already written —
+  // user-requested after hitting exactly that mix-up once already.
+  document.getElementById("add-preview-collection").textContent = t("add_preview_collection", {
+    collection: collectionLabel(currentCollection),
+  });
   document.getElementById("add-preview-summary").textContent =
     preview.new_count > 0 ? t("add_preview_new_count", { n: preview.new_count }) : t("add_preview_no_new");
   document.getElementById("add-preview-list").innerHTML =
