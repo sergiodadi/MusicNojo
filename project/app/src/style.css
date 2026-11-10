@@ -496,6 +496,16 @@ tr:hover td {
   margin: 0;
 }
 
+#detail-content .tag-link {
+  cursor: pointer;
+  border-bottom: 1px dashed #999;
+}
+
+#detail-content .tag-link:hover {
+  color: #2e4bb0;
+  border-bottom-color: #2e4bb0;
+}
+
 #detail-content ol {
   padding-left: 1.2rem;
   font-size: 0.9rem;

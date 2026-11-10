@@ -596,6 +596,33 @@ function roleList(label, names) {
   return names && names.length ? `<dt>${label}</dt><dd>${escapeHtml(names.join(", "))}</dd>` : "";
 }
 
+// Artist/genre pills in the detail card double as a shortcut into the
+// groups panel — click one to jump straight to it filtered by that
+// exact value, same as BookNojo's own genre pills (there, genre only;
+// here also artist, since it's the single most useful jump target for
+// a music collection).
+function clickableRoleList(label, names, groupFieldKey) {
+  if (!names || !names.length) return "";
+  const spans = names
+    .map(
+      (n) =>
+        `<span class="tag-link" data-group-field="${groupFieldKey}" data-value="${escapeHtml(n)}">${escapeHtml(n)}</span>`
+    )
+    .join(", ");
+  return `<dt>${label}</dt><dd>${spans}</dd>`;
+}
+
+function filterByGroupValue(field, value) {
+  groupField = field;
+  document.getElementById("group-field").value = field;
+  selectedGroup = value;
+  selectedLetter = null;
+  page = 1;
+  renderGroups();
+  render(document.getElementById("search").value);
+  saveState();
+}
+
 function field(label, value) {
   return value ? `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>` : "";
 }
@@ -626,13 +653,13 @@ function showDetail(id) {
     ${cover}
     <h2>${escapeHtml(a.title)}</h2>
     <dl>
-      ${roleList(t("detail_field_artists"), a.artists)}
+      ${clickableRoleList(t("detail_field_artists"), a.artists, "artists")}
       ${roleList(t("detail_field_composers"), a.composers)}
       ${roleList(t("detail_field_conductors"), a.conductors)}
       ${roleList(t("detail_field_musicians"), a.musicians)}
       ${roleList(t("detail_field_orchestras"), a.orchestras)}
       ${roleList(t("detail_field_choruses"), a.choruses)}
-      ${roleList(t("detail_field_genres"), a.genres)}
+      ${clickableRoleList(t("detail_field_genres"), a.genres, "genres")}
       ${roleList(t("detail_field_tags"), a.tags)}
       ${field(t("detail_field_label"), a.label)}
       ${field(t("detail_field_format"), a.format)}
@@ -645,6 +672,9 @@ function showDetail(id) {
     </dl>
     ${discs}
   `;
+  document.querySelectorAll("#detail-content .tag-link").forEach((el) =>
+    el.addEventListener("click", () => filterByGroupValue(el.dataset.groupField, el.dataset.value))
+  );
   document.getElementById("detail-actions").hidden = false;
 }
 
