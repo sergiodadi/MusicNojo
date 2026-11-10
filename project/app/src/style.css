@@ -283,6 +283,22 @@ header h1 {
   font-size: 0.8rem;
 }
 
+#group-list .group-count.sortable {
+  cursor: pointer;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+}
+
+#group-list .group-count.sortable:hover {
+  background: #e4e9ff;
+  color: #2e4bb0;
+}
+
+#group-list .group-count.sort-active {
+  background: #6a7fe0;
+  color: #fff;
+}
+
 #list-toolbar {
   display: flex;
   justify-content: space-between;

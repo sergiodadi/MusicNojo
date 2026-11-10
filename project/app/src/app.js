@@ -9,6 +9,7 @@ let currentDetailId = null;
 let groupField = "artists";
 let selectedGroup = null;
 let selectedLetter = null;
+let groupSortByCount = false;
 let panel = "library"; // 'library' | 'stats'
 let viewMode = "list"; // 'list' | 'grid'
 let collCounts = new Map();
@@ -28,6 +29,8 @@ const I18N = {
     search_placeholder: "Search by title or artist…",
     count_albums: "{n} album(s)",
     group_all: "All",
+    group_sort_tooltip_active: "Sorted by count — click to sort alphabetically",
+    group_sort_tooltip_inactive: "Sorted alphabetically — click to sort by count",
     azbar_all: "All",
     collection_default: "My Collection",
     opt_group_artists: "Artist",
@@ -128,6 +131,8 @@ const I18N = {
     search_placeholder: "Rechercher par titre ou artiste…",
     count_albums: "{n} album(s)",
     group_all: "Tous",
+    group_sort_tooltip_active: "Trié par nombre — cliquer pour trier par ordre alphabétique",
+    group_sort_tooltip_inactive: "Trié par ordre alphabétique — cliquer pour trier par nombre",
     azbar_all: "Tout",
     collection_default: "Ma collection",
     opt_group_artists: "Artiste",
@@ -445,12 +450,14 @@ function renderGroups() {
       counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
-  const sorted = [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const sorted = groupSortByCount
+    ? [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    : [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
   const list = document.getElementById("group-list");
   list.innerHTML =
     `<div class="${selectedGroup === null ? "selected" : ""}" data-group="">
-       <span>${escapeHtml(t("group_all"))}</span><span class="group-count">${totalInCollection}</span>
+       <span>${escapeHtml(t("group_all"))}</span><span class="group-count sortable${groupSortByCount ? " sort-active" : ""}" id="group-sort-toggle" title="${escapeHtml(groupSortByCount ? t("group_sort_tooltip_active") : t("group_sort_tooltip_inactive"))}">${totalInCollection}</span>
      </div>` +
     sorted
       .map(
@@ -468,6 +475,15 @@ function renderGroups() {
       saveState();
     })
   );
+  // Clicking the "All" row's own count toggles how the group list
+  // below is ordered — stopPropagation so it doesn't also trigger the
+  // row's own click handler above (which would select "All").
+  document.getElementById("group-sort-toggle").addEventListener("click", (e) => {
+    e.stopPropagation();
+    groupSortByCount = !groupSortByCount;
+    renderGroups();
+    saveState();
+  });
 }
 
 document.getElementById("group-field").addEventListener("change", (e) => {
@@ -1252,6 +1268,7 @@ function saveState() {
         groupField,
         groupValue: selectedGroup,
         azLetter: selectedLetter,
+        groupSortByCount,
         query: document.getElementById("search").value,
         sortKey,
         sortAsc,
@@ -1288,6 +1305,7 @@ function applySavedState(saved) {
   }
   selectedGroup = saved.groupValue ?? null;
   selectedLetter = saved.azLetter ?? null;
+  groupSortByCount = !!saved.groupSortByCount;
   if (saved.sortKey) {
     sortKey = saved.sortKey;
     sortAsc = !!saved.sortAsc;
