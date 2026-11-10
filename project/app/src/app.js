@@ -361,6 +361,7 @@ function switchCollection(name) {
   renderGroups();
   render("");
   if (panel === "stats") renderStats();
+  saveState();
 }
 
 // Scalar fields (format/country/label) and array fields (artists/
@@ -399,6 +400,7 @@ function renderAzBar() {
   all.addEventListener("click", () => {
     selectedLetter = null;
     renderGroups();
+    saveState();
   });
   el.appendChild(all);
   for (const letter of computeAvailableLetters()) {
@@ -408,6 +410,7 @@ function renderAzBar() {
     btn.addEventListener("click", () => {
       selectedLetter = letter;
       renderGroups();
+      saveState();
     });
     el.appendChild(btn);
   }
@@ -448,6 +451,7 @@ function renderGroups() {
       page = 1;
       renderGroups();
       render(document.getElementById("search").value);
+      saveState();
     })
   );
 }
@@ -459,6 +463,7 @@ document.getElementById("group-field").addEventListener("change", (e) => {
   page = 1;
   renderGroups();
   render(document.getElementById("search").value);
+  saveState();
 });
 
 // The WebView's security sandbox blocks raw file:// loads, so cover
@@ -518,7 +523,10 @@ function render(filterText) {
     )
     .join("");
   body.querySelectorAll("tr").forEach((tr) =>
-    tr.addEventListener("click", () => showDetail(Number(tr.dataset.id)))
+    tr.addEventListener("click", () => {
+      showDetail(Number(tr.dataset.id));
+      saveState();
+    })
   );
 
   renderGridView(pageRows);
@@ -547,7 +555,10 @@ function renderGridView(rows) {
     })
     .join("");
   grid.querySelectorAll(".grid-tile").forEach((tile) =>
-    tile.addEventListener("click", () => showDetail(Number(tile.dataset.id)))
+    tile.addEventListener("click", () => {
+      showDetail(Number(tile.dataset.id));
+      saveState();
+    })
   );
 }
 
@@ -617,6 +628,7 @@ function clearDetail() {
 document.getElementById("search").addEventListener("input", (e) => {
   page = 1;
   render(e.target.value);
+  saveState();
 });
 
 // A handful of named presets for the toolbar dropdown — a quicker path to
@@ -645,6 +657,7 @@ sortEl.addEventListener("change", () => {
   sortAsc = preset.asc;
   page = 1;
   render(document.getElementById("search").value);
+  saveState();
 });
 
 document.querySelectorAll("th").forEach((th) =>
@@ -655,16 +668,19 @@ document.querySelectorAll("th").forEach((th) =>
     page = 1;
     syncSortDropdown();
     render(document.getElementById("search").value);
+    saveState();
   })
 );
 
 document.getElementById("prev-page").addEventListener("click", () => {
   page--;
   render(document.getElementById("search").value);
+  saveState();
 });
 document.getElementById("next-page").addEventListener("click", () => {
   page++;
   render(document.getElementById("search").value);
+  saveState();
 });
 
 const viewListBtn = document.getElementById("view-list");
@@ -676,6 +692,7 @@ function setViewMode(mode) {
   listPaneForView.classList.toggle("view-grid", mode === "grid");
   viewListBtn.classList.toggle("active", mode === "list");
   viewGridBtn.classList.toggle("active", mode === "grid");
+  saveState();
 }
 
 viewListBtn.addEventListener("click", () => setViewMode("list"));
@@ -701,6 +718,7 @@ async function loadCollection(path) {
     renderGroups();
     render(document.getElementById("search").value);
     if (panel === "stats") renderStats();
+    saveState();
   } catch (err) {
     document.getElementById("count").textContent = `Error: ${err}`;
   }
@@ -1134,8 +1152,83 @@ function restoreLayout() {
   }
 }
 
+// --- Session state (which collection, where you were in it) ------------
+// Mirrors BookNojo's own saveState()/restoreState(): remembers the open
+// collection and exactly where you were in it (tab, grouping, search,
+// sort, page, selected album, view mode) across relaunches, instead of
+// always reopening the bundled sample-collection at its defaults.
+function saveState() {
+  try {
+    localStorage.setItem(
+      "musicnojo_state",
+      JSON.stringify({
+        path: currentPath,
+        collection: currentCollection,
+        groupField,
+        groupValue: selectedGroup,
+        azLetter: selectedLetter,
+        query: document.getElementById("search").value,
+        sortKey,
+        sortAsc,
+        viewMode,
+        page,
+        activeId: currentDetailId,
+      })
+    );
+  } catch {
+    // Private window / blocked site data — keep defaults, not fatal.
+  }
+}
+
+function loadSavedState() {
+  try {
+    const raw = localStorage.getItem("musicnojo_state");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Applied once, right after the initial loadCollection() renders its
+// defaults — overrides them with whatever was saved last time, then
+// re-renders once more to reflect it.
+function applySavedState(saved) {
+  if (saved.collection && collectionsList.includes(saved.collection)) {
+    currentCollection = saved.collection;
+  }
+  const validGroupFields = ["artists", "genres", "format", "country", "label"];
+  if (saved.groupField && validGroupFields.includes(saved.groupField)) {
+    groupField = saved.groupField;
+    document.getElementById("group-field").value = groupField;
+  }
+  selectedGroup = saved.groupValue ?? null;
+  selectedLetter = saved.azLetter ?? null;
+  if (saved.sortKey) {
+    sortKey = saved.sortKey;
+    sortAsc = !!saved.sortAsc;
+    syncSortDropdown();
+  }
+  if (saved.viewMode === "grid") setViewMode("grid");
+  page = saved.page || 1;
+  const query = saved.query || "";
+  document.getElementById("search").value = query;
+  renderTabs();
+  renderGroups();
+  render(query);
+  if (saved.activeId != null && albums.some((a) => a.id === saved.activeId)) {
+    showDetail(saved.activeId);
+  }
+  saveState();
+}
+
 applyStaticLabels();
 initLangToggle();
 updateVersionBadge();
 restoreLayout();
-loadCollection(null);
+
+async function boot() {
+  const saved = loadSavedState();
+  await loadCollection(saved?.path ?? null);
+  if (saved) applySavedState(saved);
+}
+boot();
