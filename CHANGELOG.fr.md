@@ -5,6 +5,13 @@
 Historique des **versions publiées sur GitHub**, une entrée par
 tag/release — même convention que le [CHANGELOG.md de BookNojo](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b2] - 2026-11-10
+
+Premier `.dmg` téléchargeable pour MusicNojo
+(`MusicNojo_0.44.0_aarch64.dmg`, non signé — voir
+[`README.fr.md`](README.fr.md) pour contourner le message « endommagé »
+du Gatekeeper).
+
 ## [v1.0.0b1] - 2026-11-10
 
 Première version bêta de MusicNojo, taguée sur GitHub — sources

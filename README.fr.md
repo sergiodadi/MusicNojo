@@ -8,7 +8,7 @@ d'une collection [Music Collector](https://www.collectorz.com/music)
 l'exporter et la modifier sans être limité à ce que l'application de
 l'éditeur propose elle-même.
 
-> Projet privé, en phase précoce — pas encore publié sur GitHub.
+> Projet privé — le dépôt GitHub n'est pas encore public.
 
 ## Pourquoi ce projet
 
@@ -45,8 +45,23 @@ scripts) — facultatifs, non nécessaires pour un usage courant : voir
 
 ## Installation
 
-Pas encore de version téléchargeable — compiler depuis les sources,
-voir [`BUILD.fr.md`](BUILD.fr.md).
+Télécharger le `.dmg` depuis la [dernière release](https://github.com/sergiodadi/MusicNojo/releases/latest),
+l'ouvrir, et glisser MusicNojo.app dans Applications.
+
+> ⚠️ **« MusicNojo est endommagé et ne peut pas être ouvert » ?**
+> MusicNojo n'est pas signé avec un certificat développeur Apple, donc
+> le Gatekeeper de macOS le met en quarantaine et affiche ce message
+> trompeur — l'app n'est pas réellement endommagée. Corriger en
+> lançant ceci une fois dans le Terminal, puis ouvrir l'app
+> normalement :
+> ```bash
+> xattr -cr /Applications/MusicNojo.app
+> ```
+> Si ça ne suffit pas, clic droit (ou Ctrl-clic) sur l'app et choisir
+> **Ouvrir** plutôt que double-cliquer.
+
+Pour compiler depuis les sources plutôt que d'utiliser le `.dmg`, voir
+[`BUILD.fr.md`](BUILD.fr.md).
 
 > Testé uniquement sur **macOS Tahoe (26)** — non vérifié sur d'autres
 > versions de macOS.

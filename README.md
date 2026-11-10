@@ -7,7 +7,7 @@ Music collection manager — imports a [Music Collector](https://www.collectorz.
 browse, export, and edit it without being limited to what the vendor
 app itself offers.
 
-> Private, early-stage project — not yet published on GitHub.
+> Private project — the GitHub repository isn't public yet.
 
 ## Why this project
 
@@ -40,7 +40,21 @@ optional, not needed for everyday use: see [`CLI.md`](CLI.md).
 
 ## Installation
 
-No downloadable release yet — compile from source, see
+Download the `.dmg` from the [latest release](https://github.com/sergiodadi/MusicNojo/releases/latest),
+open it, and drag MusicNojo.app into Applications.
+
+> ⚠️ **"MusicNojo is damaged and can't be opened"?** MusicNojo isn't
+> signed with an Apple Developer certificate, so macOS Gatekeeper
+> quarantines it and shows this misleading message — the app isn't
+> actually damaged. Fix it by running this once in Terminal, then open
+> the app normally:
+> ```bash
+> xattr -cr /Applications/MusicNojo.app
+> ```
+> If that doesn't work, right-click (or Control-click) the app and
+> choose **Open** instead of double-clicking.
+
+To compile from source instead of using the `.dmg`, see
 [`BUILD.md`](BUILD.md).
 
 > Tested only on **macOS Tahoe (26)** — not verified on other macOS
