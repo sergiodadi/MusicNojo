@@ -6,6 +6,7 @@ use music_collector_export::{
     AddAlbumPreview, Album, AlbumFields, Connection, ManyToManyInputs, ManyToManyReplaceFlags,
     RoleInputs, RoleReplaceFlags,
 };
+use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
 
@@ -355,6 +356,61 @@ mod tests {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Native macOS menu bar — same shape as BookNojo's own `build_menu`.
+fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    #[cfg(target_os = "macos")]
+    let app_menu = SubmenuBuilder::new(app, "MusicNojo")
+        .about(None)
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .text("open_collection", "Open Collection…")
+        .separator()
+        .close_window()
+        .build()?;
+
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+
+    let window_menu = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .separator()
+        .close_window()
+        .build()?;
+
+    // A submenu titled exactly "Help" is swallowed entirely by macOS/
+    // Tauri in this Tauri version — "MusicNojo Help" sidesteps it,
+    // same finding/workaround as BookNojo's own menu.
+    let help_menu = SubmenuBuilder::new(app, "MusicNojo Help")
+        .text("about_musicnojo", "About MusicNojo")
+        .build()?;
+
+    let mut builder = MenuBuilder::new(app);
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.item(&app_menu);
+    }
+    builder
+        .item(&file_menu)
+        .item(&edit_menu)
+        .item(&window_menu)
+        .item(&help_menu)
+        .build()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -368,6 +424,21 @@ pub fn run() {
             edit_album,
             delete_album,
         ])
+        .setup(|app| {
+            let menu = build_menu(app.handle())?;
+            app.set_menu(menu)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open_collection" => pick_collection(app.clone()),
+            "about_musicnojo" => {
+                app.dialog()
+                    .message(format!("MusicNojo\nVersion {}", env!("CARGO_PKG_VERSION")))
+                    .title("About MusicNojo")
+                    .show(|_| {});
+            }
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
 }

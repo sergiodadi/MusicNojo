@@ -1,6 +1,6 @@
 [package]
 name = "music_collector_export"
-version = "0.40.0"
+version = "0.41.0"
 edition = "2021"
 license = "MIT"
 
