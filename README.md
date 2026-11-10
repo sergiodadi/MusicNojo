@@ -1,88 +1,61 @@
-# music_collector_export (MusicNojo)
+# MusicNojo
 
-Command-line tools for Music Collector (Collectorz) collections,
-following the same approach as the BookNojo project (for Book
-Collector): read/write a copy of the collection's own SQLite file
-directly, never the live file.
+> 🇫🇷 [Lire en français](README.fr.md)
 
-**Status: early, private.** CLI tools and the macOS app are both
-functionally complete relative to each other: anything `mc_export`
-reads, both `mc_add` and the app can write.
+Music collection manager — imports a [Music Collector](https://www.collectorz.com/music)
+(Collectorz) collection's database into its own tools, and lets you
+browse, export, and edit it without being limited to what the vendor
+app itself offers.
 
-All code and manifests live under **`project/`** — the repo root only
-holds documentation. Every command below assumes you are inside
-`project/`.
+> Private, early-stage project — not yet published on GitHub.
 
-## App
+## Why this project
 
-A Tauri app under `project/app/`: open a collection (native folder
-picker), browse/search it, click an album for its full detail
-(artists/composers/conductors/musicians/orchestras/choruses, genres/
-tags/extras/studios, cover image, every scalar field, tracks with
-lengths), and add/edit/delete albums through a form. Opens the bundled
-fictional `sample-collection/` by default.
+MusicNojo is a sibling project to [BookNojo](https://github.com/sergiodadi/BookNojo)
+(the same approach applied to Book Collector instead of Music
+Collector): read and write a copy of the collection's own SQLite file
+directly, with your own tools, rather than depending solely on the
+vendor application to view or grow your collection.
 
-```sh
-cd project/app
-cargo tauri dev      # development window, hot reload
-cargo tauri build    # builds a real .app (and a .dmg), in
-                      # app/src-tauri/target/release/bundle/
-```
+## What it does today
 
-Same safety rule as the CLI: refuses to write to a path that looks
-like your real collection, and makes an automatic backup
-(`backups/Music_data.<timestamp>.bak`, next to the collection) before
-every write it does make.
+- **macOS application** (icon, window, native menus) to view, add, edit
+  and delete albums in a collection — with automatic backups before
+  any write, and an outright refusal to write to anything that looks
+  like your real collection.
+- Grouping by artist/genre/format/country/label, with an A→Z bar;
+  search; sort (dropdown or column click); list/grid view; pagination.
+- Multiple sub-collections in one file — tabs switch between them.
+- Statistics panel (genres, formats, countries, labels, decades, year
+  added), with the "no cover"/"no artist" counts clickable to see
+  which albums they refer to — and the "no cover" list doubles as a
+  one-click way to add the missing cover.
+- Bilingual French/English interface.
+- Command-line export to **CSV**, **JSON**, and a standalone **HTML**
+  page.
 
-## Binaries
+➡️ Full guide to using the application: [`MANUAL.md`](MANUAL.md).
+Command-line tools also exist (CSV/JSON/HTML export, scripting) —
+optional, not needed for everyday use: see [`CLI.md`](CLI.md).
 
-- **`mc_export`** — exports the collection to CSV, JSON, and/or a
-  standalone HTML page.
-  ```sh
-  mc_export --db path/to/MyCollection.mucp --csv out.csv --json out.json --html out.html
-  ```
-- **`mc_add`** — a plan-then-commit workflow to add, edit, or delete an
-  album. A `*-plan` subcommand only computes and prints/writes the SQL
-  that would run; `commit` is the only subcommand that actually
-  writes, and only after you've reviewed the plan. `set-cover` is the
-  one exception (plain file copy, no row allocation to review).
-  ```sh
-  mc_add add-plan --db path/to/MyCollection.mucp \
-    --title "Some Album" --artist "Some Artist" --genre "Rock" \
-    --track "Track One" --track "Track Two" \
-    --out plan.sql
-  mc_add commit --db path/to/MyCollection.mucp --plan plan.sql
+## Installation
 
-  mc_add edit-plan --db path/to/MyCollection.mucp --id <album id> \
-    --title "New Title" --out edit.sql
-  mc_add delete-plan --db path/to/MyCollection.mucp --id <album id> \
-    --out delete.sql
-  mc_add set-cover --db path/to/MyCollection.mucp --id <album id> \
-    --front cover.jpg
-  ```
-  Both tools refuse to operate on a path that looks like your real
-  collection (`~/Documents/Collectorz/.../Music Collector.../`) — only
-  ever point them at a copy.
+No downloadable release yet — compile from source, see
+[`BUILD.md`](BUILD.md).
 
-## Build and test
+> Tested only on **macOS Tahoe (26)** — not verified on other macOS
+> versions.
 
-```sh
-cd project
-cargo build --release
-cargo test --release
-```
+## Version history
 
-Tests run against local, gitignored test copies and are skipped
-gracefully if those copies aren't present:
-
-```sh
-./refresh-testdata.sh     # testdata/: read-only copy, for mc_export
-./refresh-testdata-rw.sh  # testdata-rw/: writable copy, for mc_add
-```
-
-Neither script, nor the tools themselves, ever write to the real
-collection file.
+See [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 
 [MIT](LICENSE).
+
+---
+
+These packages were built, tested and published with the help of Claude, the AI assistant by Anthropic.
+
+Music Collector and Collectorz/CLZ are trademarks of their respective owners. MusicNojo is an independent project, not affiliated with these companies.
