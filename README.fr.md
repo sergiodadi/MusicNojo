@@ -12,12 +12,19 @@ l'éditeur propose elle-même.
 
 ## Pourquoi ce projet
 
+Music Collector pour Mac est une application Intel qui dépend de
+Rosetta 2. Apple a annoncé la fin programmée de Rosetta 2 (support
+complet jusqu'à macOS 27, largement retiré à partir de macOS 28,
+~automne 2027) — Music Collector a donc une espérance de vie limitée
+sur un Mac à jour. MusicNojo lit et écrit une copie d'une collection
+existante avec ses propres outils indépendants — export, consultation,
+ajout, modification, suppression, pochettes — pour qu'une collection
+continue de fonctionner, et de grandir, sans dépendre de Music
+Collector pour l'un ou pour l'autre, le jour où il ne tournera plus.
+
 MusicNojo est un projet frère de [BookNojo](https://github.com/sergiodadi/BookNojo)
-(la même approche appliquée à Book Collector au lieu de Music
-Collector) : lire et écrire une copie du fichier SQLite de la
-collection directement, avec ses propres outils, plutôt que de
-dépendre uniquement de l'application de l'éditeur pour consulter ou
-faire grandir sa collection.
+(la même approche et le même problème de fond avec Rosetta 2, appliqués
+à Book Collector au lieu de Music Collector).
 
 ## Ce qu'il fait aujourd'hui
 
