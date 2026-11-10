@@ -1556,6 +1556,21 @@ pub fn preview_add_album(
     })
 }
 
+/// Current time as a Core Data reference-date timestamp (seconds since
+/// 2001-01-01), the same representation `ZDATEADDED` itself uses —
+/// stamped automatically when an album is added, same as the real
+/// Music Collector app does. Unlike every other field in `build_plan`,
+/// this is never optional or caller-supplied: there's no sensible
+/// user-typed value for "when this was added", and editing an album
+/// never touches it (it stays the original add time).
+fn current_core_data_timestamp() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        - 978_307_200.0
+}
+
 pub fn build_plan(
     conn: &Connection,
     title: &str,
@@ -1577,6 +1592,7 @@ pub fn build_plan(
         "ZCOLLECTIONSTATUS".to_string(),
         "ZNRTRACKS".to_string(),
         "ZTITLE".to_string(),
+        "ZDATEADDED".to_string(),
     ];
     let mut values = vec![
         album_id.to_string(),
@@ -1585,6 +1601,7 @@ pub fn build_plan(
         "2".to_string(),
         tracks.len().to_string(),
         sql_quote(title),
+        current_core_data_timestamp().to_string(),
     ];
     for (key, column) in [
         ("format", "ZFORMAT"),

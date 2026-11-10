@@ -103,7 +103,10 @@ chaque champ scalaire (`--format`, `--label`, `--country`,
 `--location`, `--release-year`, `--rating`, `--notes`, `--upc`,
 `--collection`), et `--track` (répétable, un par occurrence, dans
 l'ordre). `--collection` doit nommer une sous-collection déjà
-existante — elle n'est jamais créée.
+existante — elle n'est jamais créée. La date d'ajout de l'album est
+horodatée automatiquement avec la date et l'heure actuelles — il n'y a
+pas d'option pour ça, puisque modifier l'album par la suite ne la
+change jamais non plus.
 
 ### Modifier — `edit-plan`
 
@@ -122,8 +125,7 @@ l'album vers une autre sous-collection déjà existante). Un rôle ou un
 champ many-to-many n'est **remplacé** que si son option `--replace-*`
 correspondante est passée (`--replace-artists`, `--replace-genres`,
 etc.) — sinon les valeurs passées pour ce champ sont ignorées et les
-valeurs existantes restent inchangées. Il n'est pas encore possible de
-définir la date d'ajout d'un album depuis la ligne de commande.
+valeurs existantes restent inchangées.
 
 ### Supprimer — `delete-plan`
 

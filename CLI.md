@@ -97,7 +97,9 @@ many-to-many field (repeatable: `--genre`, `--tag`, `--extra`,
 `--location`, `--release-year`, `--rating`, `--notes`, `--upc`,
 `--collection`), and `--track` (repeatable, one per occurrence, in
 order). `--collection` must name an already-existing sub-collection —
-it is never created.
+it is never created. The album's date-added is stamped automatically
+with the current date and time — there is no flag for it, since
+editing an album never changes it afterward either.
 
 ### Editing — `edit-plan`
 
@@ -116,8 +118,7 @@ already-existing sub-collection). A role or many-to-many field is
 only **replaced** if you pass its matching `--replace-*` flag
 (`--replace-artists`, `--replace-genres`, etc.) — otherwise the values
 you pass are ignored for that field and the existing ones are left
-untouched. There is no way yet to set an album's date-added from the
-command line.
+untouched.
 
 ### Deleting — `delete-plan`
 

@@ -59,7 +59,9 @@ source, see [`BUILD.md`](BUILD.md).
   don't already exist in the collection (catching a typo before it
   becomes a permanent duplicate entry) — confirming it is what
   actually adds the album. The new album joins whichever
-  sub-collection tab is currently active.
+  sub-collection tab is currently active, and is stamped with the
+  current date and time as its date added — editing an album never
+  changes this later.
 - **Edit an album**: from its detail card, the same form opens
   pre-filled with the current values, and writes immediately (no
   preview step). An album's sub-collection can't be changed this way
@@ -96,8 +98,7 @@ source, see [`BUILD.md`](BUILD.md).
 ## 6. What the application doesn't do yet
 
 - Changing an album's sub-collection on *edit* (only *add* sets one,
-  from whichever tab is active), or setting its date-added, from the
-  application or the command line.
+  from whichever tab is active).
 - Online lookup to pre-fill a record from a barcode/UPC or a Discogs/
   MusicBrainz match — not started.
 - Not yet code-signed/notarized with an Apple developer account — no

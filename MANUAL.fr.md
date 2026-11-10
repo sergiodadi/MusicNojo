@@ -65,7 +65,9 @@ téléchargeable — pour la compiler depuis les sources, voir
   (pour repérer une faute de frappe avant qu'elle devienne une entrée
   dupliquée permanente) — c'est la confirmation de cet aperçu qui
   ajoute réellement l'album. Le nouvel album rejoint l'onglet de
-  sous-collection actif au moment de l'ajout.
+  sous-collection actif au moment de l'ajout, et reçoit la date et
+  l'heure actuelles comme date d'ajout — modifier l'album par la
+  suite ne change jamais cette date.
 - **Modifier un album** : depuis sa fiche détail, le même formulaire
   s'ouvre pré-rempli avec les valeurs actuelles, et écrit
   immédiatement (pas d'étape d'aperçu). La sous-collection d'un album
@@ -103,8 +105,7 @@ téléchargeable — pour la compiler depuis les sources, voir
 ## 6. Ce que l'application ne fait pas encore
 
 - Changer la sous-collection d'un album en le modifiant (seul l'ajout
-  en définit une, celle de l'onglet actif), ou définir sa date
-  d'ajout, depuis l'application ou la ligne de commande.
+  en définit une, celle de l'onglet actif).
 - Recherche en ligne pour pré-remplir une fiche à partir d'un
   code-barres/UPC ou d'une correspondance Discogs/MusicBrainz — pas
   commencé.
