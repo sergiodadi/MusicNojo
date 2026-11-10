@@ -178,6 +178,37 @@ header h1 {
   padding: 0.3rem;
 }
 
+#azbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+#azbar button {
+  border: 1px solid transparent;
+  background: none;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #888;
+  padding: 0.1rem 0.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 1.1rem;
+}
+
+#azbar button:hover {
+  background: #f5f7ff;
+  color: #1a1a1a;
+}
+
+#azbar button.active {
+  background: #6a7fe0;
+  color: #fff;
+}
+
 #group-list {
   flex: 1;
   overflow-y: auto;
@@ -204,6 +235,107 @@ header h1 {
 #group-list .group-count {
   color: #888;
   font-size: 0.8rem;
+}
+
+#list-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.8rem;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+#sort {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.85rem;
+}
+
+#view-toggle {
+  display: flex;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+#view-toggle button {
+  border: none;
+  background: #fff;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: #666;
+}
+
+#view-toggle button:hover {
+  background: #f5f7ff;
+  color: #1a1a1a;
+}
+
+#view-toggle button + button {
+  border-left: 1px solid #ddd;
+}
+
+#view-toggle button.active {
+  background: #6a7fe0;
+  color: #fff;
+}
+
+#grid-view {
+  display: none;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.8rem;
+  padding: 0.8rem;
+  align-content: start;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+#list-pane.view-grid table {
+  display: none;
+}
+
+#list-pane.view-grid #grid-view {
+  display: grid;
+}
+
+.grid-tile {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 0.3rem;
+}
+
+.grid-tile:hover,
+.grid-tile.active {
+  background: #f0f2ff;
+}
+
+.grid-tile .thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #e4e4e8;
+  display: block;
+}
+
+.grid-tile .t {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-tile .a {
+  font-size: 0.72rem;
+  color: #666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 table {

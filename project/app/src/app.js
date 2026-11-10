@@ -8,7 +8,9 @@ let currentPath = null;
 let currentDetailId = null;
 let groupField = "artists";
 let selectedGroup = null;
+let selectedLetter = null;
 let panel = "library"; // 'library' | 'stats'
+let viewMode = "list"; // 'list' | 'grid'
 
 // --- i18n ---------------------------------------------------------------
 // Mirrors BookNojo's own t()/setLang() pattern: everything user-visible
@@ -23,11 +25,18 @@ const I18N = {
     search_placeholder: "Search by title or artist…",
     count_albums: "{n} album(s)",
     group_all: "All",
+    azbar_all: "All",
     opt_group_artists: "Artist",
     opt_group_genres: "Genre",
     opt_group_format: "Format",
     opt_group_country: "Country",
     opt_group_label: "Label",
+    opt_sort_title: "Title (A→Z)",
+    opt_sort_artist: "Artist (A→Z)",
+    opt_sort_year_desc: "Year (newest first)",
+    opt_sort_label: "Label (A→Z)",
+    list_view_list: "☰ List",
+    list_view_grid: "▦ Grid",
     col_title: "Title",
     col_artists: "Artist(s)",
     col_genres: "Genre(s)",
@@ -100,11 +109,18 @@ const I18N = {
     search_placeholder: "Rechercher par titre ou artiste…",
     count_albums: "{n} album(s)",
     group_all: "Tous",
+    azbar_all: "Tout",
     opt_group_artists: "Artiste",
     opt_group_genres: "Genre",
     opt_group_format: "Format",
     opt_group_country: "Pays",
     opt_group_label: "Label",
+    opt_sort_title: "Titre (A→Z)",
+    opt_sort_artist: "Artiste (A→Z)",
+    opt_sort_year_desc: "Année (plus récent d'abord)",
+    opt_sort_label: "Label (A→Z)",
+    list_view_list: "☰ Liste",
+    list_view_grid: "▦ Grille",
     col_title: "Titre",
     col_artists: "Artiste(s)",
     col_genres: "Genre(s)",
@@ -272,10 +288,55 @@ function groupValues(album, field) {
   return v ? [v] : [];
 }
 
+// First letter used by the A-Z quick-jump bar — non-letters (numbers,
+// symbols, accented-but-not-matched edge cases) all bucket under "#".
+function letterOf(value) {
+  const ch = (value || "").trim().charAt(0).toUpperCase();
+  return /[A-Z]/.test(ch) ? ch : "#";
+}
+
+function computeAvailableLetters() {
+  const set = new Set();
+  for (const a of albums) {
+    for (const v of groupValues(a, groupField)) {
+      if (v) set.add(letterOf(v));
+    }
+  }
+  return [...set].sort();
+}
+
+function renderAzBar() {
+  const el = document.getElementById("azbar");
+  el.innerHTML = "";
+  const all = document.createElement("button");
+  all.textContent = t("azbar_all");
+  all.className = selectedLetter === null ? "active" : "";
+  all.addEventListener("click", () => {
+    selectedLetter = null;
+    renderGroups();
+  });
+  el.appendChild(all);
+  for (const letter of computeAvailableLetters()) {
+    const btn = document.createElement("button");
+    btn.textContent = letter;
+    btn.className = selectedLetter === letter ? "active" : "";
+    btn.addEventListener("click", () => {
+      selectedLetter = letter;
+      renderGroups();
+    });
+    el.appendChild(btn);
+  }
+}
+
+// Narrows which group values are listed below (not the album list itself —
+// picking a specific group from the narrowed list is still what filters
+// the albums), same two-step behavior as BookNojo's own A-Z bar.
 function renderGroups() {
+  renderAzBar();
   const counts = new Map();
   for (const a of albums) {
     for (const v of groupValues(a, groupField)) {
+      if (selectedLetter && letterOf(v) !== selectedLetter) continue;
       counts.set(v, (counts.get(v) ?? 0) + 1);
     }
   }
@@ -305,6 +366,7 @@ function renderGroups() {
 document.getElementById("group-field").addEventListener("change", (e) => {
   groupField = e.target.value;
   selectedGroup = null;
+  selectedLetter = null;
   renderGroups();
   render(document.getElementById("search").value);
 });
@@ -358,6 +420,28 @@ function render(filterText) {
     .join("");
   body.querySelectorAll("tr").forEach((tr) =>
     tr.addEventListener("click", () => showDetail(Number(tr.dataset.id)))
+  );
+
+  renderGridView(rows);
+}
+
+function renderGridView(rows) {
+  const grid = document.getElementById("grid-view");
+  grid.innerHTML = rows
+    .map((a) => {
+      const src = coverSrc(a.front_cover);
+      const thumb = src
+        ? `<img class="thumb" loading="lazy" src="${src}" alt="">`
+        : `<div class="thumb"></div>`;
+      return `<div class="grid-tile" data-id="${a.id}">
+        ${thumb}
+        <div class="t">${escapeHtml(a.title)}</div>
+        <div class="a">${escapeHtml(a.artists.join(", "))}</div>
+      </div>`;
+    })
+    .join("");
+  grid.querySelectorAll(".grid-tile").forEach((tile) =>
+    tile.addEventListener("click", () => showDetail(Number(tile.dataset.id)))
   );
 }
 
@@ -424,14 +508,56 @@ function clearDetail() {
 }
 
 document.getElementById("search").addEventListener("input", (e) => render(e.target.value));
+
+// A handful of named presets for the toolbar dropdown — a quicker path to
+// the sort orders people actually reach for, without giving up the
+// column-header click/toggle that already covers every field.
+const SORT_PRESETS = {
+  title: { key: "title", asc: true },
+  artist: { key: "artists", asc: true },
+  year_desc: { key: "release_year", asc: false },
+  label: { key: "label", asc: true },
+};
+
+const sortEl = document.getElementById("sort");
+
+function syncSortDropdown() {
+  const match = Object.entries(SORT_PRESETS).find(
+    ([, p]) => p.key === sortKey && p.asc === sortAsc
+  );
+  if (match) sortEl.value = match[0];
+}
+
+sortEl.addEventListener("change", () => {
+  const preset = SORT_PRESETS[sortEl.value];
+  sortKey = preset.key;
+  sortAsc = preset.asc;
+  render(document.getElementById("search").value);
+});
+
 document.querySelectorAll("th").forEach((th) =>
   th.addEventListener("click", () => {
     const k = th.dataset.k;
     sortAsc = sortKey === k ? !sortAsc : true;
     sortKey = k;
+    syncSortDropdown();
     render(document.getElementById("search").value);
   })
 );
+
+const viewListBtn = document.getElementById("view-list");
+const viewGridBtn = document.getElementById("view-grid");
+const listPaneForView = document.getElementById("list-pane");
+
+function setViewMode(mode) {
+  viewMode = mode;
+  listPaneForView.classList.toggle("view-grid", mode === "grid");
+  viewListBtn.classList.toggle("active", mode === "list");
+  viewGridBtn.classList.toggle("active", mode === "grid");
+}
+
+viewListBtn.addEventListener("click", () => setViewMode("list"));
+viewGridBtn.addEventListener("click", () => setViewMode("grid"));
 
 async function loadCollection(path) {
   try {
@@ -446,6 +572,7 @@ async function loadCollection(path) {
     updateFileBadge();
     clearDetail();
     selectedGroup = null;
+    selectedLetter = null;
     renderGroups();
     render(document.getElementById("search").value);
     if (panel === "stats") renderStats();

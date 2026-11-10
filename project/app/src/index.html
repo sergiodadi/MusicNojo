@@ -25,11 +25,24 @@
         <option value="country" data-i18n="opt_group_country">Country</option>
         <option value="label" data-i18n="opt_group_label">Label</option>
       </select>
+      <div id="azbar"></div>
       <div id="group-list"></div>
     </aside>
     <div id="splitter-v" title="Drag to resize"></div>
     <div id="right-col">
       <div id="list-pane">
+        <div id="list-toolbar">
+          <select id="sort">
+            <option value="title" data-i18n="opt_sort_title">Title (A→Z)</option>
+            <option value="artist" data-i18n="opt_sort_artist">Artist (A→Z)</option>
+            <option value="year_desc" data-i18n="opt_sort_year_desc">Year (newest first)</option>
+            <option value="label" data-i18n="opt_sort_label">Label (A→Z)</option>
+          </select>
+          <div id="view-toggle">
+            <button id="view-list" class="active" data-i18n="list_view_list">☰ List</button>
+            <button id="view-grid" data-i18n="list_view_grid">▦ Grid</button>
+          </div>
+        </div>
         <table id="albums">
           <thead>
             <tr>
@@ -43,6 +56,7 @@
           </thead>
           <tbody></tbody>
         </table>
+        <div id="grid-view"></div>
       </div>
       <div id="splitter-h" title="Drag to resize"></div>
       <aside id="detail">
