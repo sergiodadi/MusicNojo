@@ -1954,7 +1954,7 @@ dependencies = [
 
 [[package]]
 name = "music_collector_export"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "musicnojo"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "music_collector_export",
  "serde",

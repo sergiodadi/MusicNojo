@@ -37,6 +37,9 @@ const I18N = {
     opt_sort_label: "Label (A→Z)",
     list_view_list: "☰ List",
     list_view_grid: "▦ Grid",
+    list_prev: "‹ Prev.",
+    list_next: "Next ›",
+    list_page_info: "Page {page} of {total}",
     col_title: "Title",
     col_artists: "Artist(s)",
     col_genres: "Genre(s)",
@@ -121,6 +124,9 @@ const I18N = {
     opt_sort_label: "Label (A→Z)",
     list_view_list: "☰ Liste",
     list_view_grid: "▦ Grille",
+    list_prev: "‹ Préc.",
+    list_next: "Suiv. ›",
+    list_page_info: "Page {page} / {total}",
     col_title: "Titre",
     col_artists: "Artiste(s)",
     col_genres: "Genre(s)",
@@ -357,6 +363,7 @@ function renderGroups() {
   list.querySelectorAll("div").forEach((div) =>
     div.addEventListener("click", () => {
       selectedGroup = div.dataset.group || null;
+      page = 1;
       renderGroups();
       render(document.getElementById("search").value);
     })
@@ -367,6 +374,7 @@ document.getElementById("group-field").addEventListener("change", (e) => {
   groupField = e.target.value;
   selectedGroup = null;
   selectedLetter = null;
+  page = 1;
   renderGroups();
   render(document.getElementById("search").value);
 });
@@ -386,6 +394,9 @@ function escapeHtml(s) {
   );
 }
 
+const PAGE_SIZE = 60;
+let page = 1;
+
 function render(filterText) {
   const needle = filterText.trim().toLowerCase();
   const rows = albums.filter((a) => {
@@ -404,9 +415,14 @@ function render(filterText) {
     return sortAsc ? cmp : -cmp;
   });
 
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  page = Math.min(Math.max(1, page), totalPages);
+  const start = (page - 1) * PAGE_SIZE;
+  const pageRows = rows.slice(start, start + PAGE_SIZE);
+
   document.getElementById("count").textContent = t("count_albums", { n: rows.length });
   const body = document.querySelector("#albums tbody");
-  body.innerHTML = rows
+  body.innerHTML = pageRows
     .map(
       (a) => `<tr data-id="${a.id}">
         <td>${escapeHtml(a.title)}</td>
@@ -422,7 +438,14 @@ function render(filterText) {
     tr.addEventListener("click", () => showDetail(Number(tr.dataset.id)))
   );
 
-  renderGridView(rows);
+  renderGridView(pageRows);
+  renderPager(totalPages);
+}
+
+function renderPager(totalPages) {
+  document.getElementById("page-info").textContent = t("list_page_info", { page, total: totalPages });
+  document.getElementById("prev-page").disabled = page <= 1;
+  document.getElementById("next-page").disabled = page >= totalPages;
 }
 
 function renderGridView(rows) {
@@ -507,7 +530,10 @@ function clearDetail() {
   document.getElementById("detail-actions").hidden = true;
 }
 
-document.getElementById("search").addEventListener("input", (e) => render(e.target.value));
+document.getElementById("search").addEventListener("input", (e) => {
+  page = 1;
+  render(e.target.value);
+});
 
 // A handful of named presets for the toolbar dropdown — a quicker path to
 // the sort orders people actually reach for, without giving up the
@@ -532,6 +558,7 @@ sortEl.addEventListener("change", () => {
   const preset = SORT_PRESETS[sortEl.value];
   sortKey = preset.key;
   sortAsc = preset.asc;
+  page = 1;
   render(document.getElementById("search").value);
 });
 
@@ -540,10 +567,20 @@ document.querySelectorAll("th").forEach((th) =>
     const k = th.dataset.k;
     sortAsc = sortKey === k ? !sortAsc : true;
     sortKey = k;
+    page = 1;
     syncSortDropdown();
     render(document.getElementById("search").value);
   })
 );
+
+document.getElementById("prev-page").addEventListener("click", () => {
+  page--;
+  render(document.getElementById("search").value);
+});
+document.getElementById("next-page").addEventListener("click", () => {
+  page++;
+  render(document.getElementById("search").value);
+});
 
 const viewListBtn = document.getElementById("view-list");
 const viewGridBtn = document.getElementById("view-grid");
@@ -573,6 +610,7 @@ async function loadCollection(path) {
     clearDetail();
     selectedGroup = null;
     selectedLetter = null;
+    page = 1;
     renderGroups();
     render(document.getElementById("search").value);
     if (panel === "stats") renderStats();
