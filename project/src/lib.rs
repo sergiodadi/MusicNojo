@@ -61,6 +61,11 @@ pub struct Album {
     pub owner: Option<String>,
     pub location: Option<String>,
     pub collection: Option<String>,
+    /// When this album was added to the collection — "YYYY-MM-DD HH:MM:SS",
+    /// UTC (ZDATEADDED is a Core Data reference-date timestamp: seconds
+    /// since 2001-01-01, converted in SQL rather than pulling in a
+    /// date/time crate just for this one field).
+    pub date_added: Option<String>,
     pub release_year: Option<String>,
     pub rating: Option<i64>,
     pub notes: Option<String>,
@@ -390,6 +395,7 @@ struct AlbumRow {
     owner_pk: Option<i64>,
     location_pk: Option<i64>,
     collection_pk: Option<i64>,
+    date_added: Option<String>,
     release_year: Option<String>,
     rating: Option<i64>,
     notes: Option<String>,
@@ -408,7 +414,8 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
         "SELECT Z_PK, ZTITLE, ZFORMAT, ZCOUNTRY, ZLABEL, ZCONDITION, ZPACKAGING, \
                 ZVINYLCOLOR, ZSPARS, ZOWNER, ZLOCATION, ZCOLLECTION, ZRELEASEYEAR, \
                 ZMYRATING, ZNOTES, ZUPC, ZFRONTCOVER, ZBACKCOVER, ZTHUMBFILEPATH, \
-                ZBACKDROP, ZNRTRACKS \
+                ZBACKDROP, ZNRTRACKS, \
+                datetime(ZDATEADDED + 978307200, 'unixepoch') \
          FROM ZCOLLECTIBLE WHERE Z_ENT = ?1 ORDER BY Z_PK",
     )?;
     let rows: Vec<AlbumRow> = stmt
@@ -435,6 +442,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
                 thumbnail: row.get(18)?,
                 backdrop: row.get(19)?,
                 track_count: row.get(20)?,
+                date_added: row.get(21)?,
             })
         })?
         .filter_map(|r| r.ok())
@@ -455,6 +463,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             owner_pk,
             location_pk,
             collection_pk,
+            date_added,
             release_year,
             rating,
             notes,
@@ -490,6 +499,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             owner: owner_pk.and_then(|pk| lookups.owners.get(&pk).cloned()),
             location: lookups.simple("ZLOCATION", location_pk),
             collection: collection_pk.and_then(|pk| lookups.collections.get(&pk).cloned()),
+            date_added,
             release_year,
             rating,
             notes,
@@ -631,6 +641,7 @@ pub fn write_csv(path: &Path, albums: &[Album]) -> Result<()> {
         "owner",
         "location",
         "collection",
+        "date_added",
         "release_year",
         "rating",
         "notes",
@@ -675,6 +686,7 @@ pub fn write_csv(path: &Path, albums: &[Album]) -> Result<()> {
             album.owner.clone().unwrap_or_default(),
             album.location.clone().unwrap_or_default(),
             album.collection.clone().unwrap_or_default(),
+            album.date_added.clone().unwrap_or_default(),
             album.release_year.clone().unwrap_or_default(),
             album.rating.map(|r| r.to_string()).unwrap_or_default(),
             album.notes.clone().unwrap_or_default(),

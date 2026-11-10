@@ -2,7 +2,7 @@ use std::path::Path;
 
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
-    load_albums, open_readonly, open_writable, resolve_db_path, Album, AlbumFields,
+    load_albums, open_readonly, open_writable, resolve_db_path, set_cover, Album, AlbumFields,
     Connection, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
 };
 use tauri::{Emitter, Manager};
@@ -119,6 +119,37 @@ fn pick_collection(app: tauri::AppHandle) {
         .pick_file(move |file| {
             if let Some(file) = file {
                 let _ = app.emit("collection-picked", file.to_string());
+            }
+        });
+}
+
+/// Native picker for a cover image, same async-callback shape as
+/// `pick_collection` (and for the same reason — a blocking pick from a
+/// command deadlocks). `set_cover` already does its own real-collection
+/// refusal and backup internally (see its own doc comment), so this
+/// calls it directly rather than going through `open_for_write` — same
+/// pattern `mc_add set-cover`'s CLI already uses. Only the front cover
+/// is offered here: the entry point is the stats panel's "no cover"
+/// list, which only cares about the front cover albums are missing.
+/// Result goes back as an event (not the command's return value) since
+/// the picker is asynchronous; `cover-set-error`'s payload is the plain
+/// error string Tauri's IPC can carry.
+#[tauri::command]
+fn pick_and_set_cover(app: tauri::AppHandle, path: String, id: i64) {
+    app.dialog()
+        .file()
+        .set_title("Choose a cover image")
+        .add_filter("Image", &["jpg", "jpeg", "png", "gif", "bmp"])
+        .pick_file(move |file| {
+            let Some(file) = file else { return };
+            let Some(local_path) = file.as_path() else { return };
+            match set_cover(Path::new(&path), id, Some(local_path), None) {
+                Ok(()) => {
+                    let _ = app.emit("cover-set", id);
+                }
+                Err(e) => {
+                    let _ = app.emit("cover-set-error", e.to_string());
+                }
             }
         });
 }
@@ -313,6 +344,7 @@ pub fn run() {
             app_version,
             list_albums,
             pick_collection,
+            pick_and_set_cover,
             add_album,
             edit_album,
             delete_album,

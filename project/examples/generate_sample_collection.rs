@@ -565,6 +565,22 @@ fn main() -> Result<()> {
             [album.title],
             |row| row.get(0),
         )?;
+        // mc_add's write path never sets ZDATEADDED (not asked for yet) —
+        // the real app does, and it's always populated in a real
+        // collection. Backfilled here, purely for this fictional demo
+        // data, spread across the last ~2 years (deterministic from the
+        // title hash) so "sort by date added" and the stats panel's
+        // "by year added" breakdown have something to show.
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_secs() as i64;
+        let days_ago = (hash_u32(album.title) % 700) as i64;
+        let date_added_core_data = (now_unix - 978_307_200 - days_ago * 86_400) as f64;
+        conn.execute(
+            "UPDATE ZCOLLECTIBLE SET ZDATEADDED = ?1 WHERE Z_PK = ?2",
+            rusqlite::params![date_added_core_data, id],
+        )?;
+
         let front = write_cover(&scratch, "front.jpg", &placeholder_cover(&album, true)?)?;
         let back = write_cover(&scratch, "back.jpg", &placeholder_cover(&album, false)?)?;
         set_cover(root, id, Some(&front), Some(&back))?;

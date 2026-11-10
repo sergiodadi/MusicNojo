@@ -39,6 +39,7 @@ const I18N = {
     opt_sort_artist: "Artist (A→Z)",
     opt_sort_year_desc: "Year (newest first)",
     opt_sort_label: "Label (A→Z)",
+    opt_sort_date_added: "Date added (newest first)",
     list_view_list: "☰ List",
     list_view_grid: "▦ Grid",
     list_prev: "‹ Prev.",
@@ -68,10 +69,12 @@ const I18N = {
     detail_field_rating: "Rating",
     detail_field_notes: "Notes",
     detail_field_upc: "UPC",
+    detail_field_date_added: "Date added",
     detail_disc: "Disc {n}",
     detail_tracks: "Tracks",
     delete_confirm: 'Delete "{title}"? This cannot be undone (a backup is made first).',
     delete_failed: "Delete failed: {err}",
+    cover_set_failed: "Setting the cover failed: {err}",
     form_title_add: "Add Album",
     form_title_edit: "Edit Album",
     form_label_title: "Title",
@@ -100,12 +103,14 @@ const I18N = {
     stats_albums: "{n} album(s)",
     stats_tracks: "{n} track(s)",
     stats_no_cover: "{n} with no cover",
+    stats_add_cover_hint: "Click to add a cover",
     stats_no_artist: "{n} with no artist",
     stats_genres: "Genres",
     stats_formats: "Formats",
     stats_countries: "Countries",
     stats_labels_top10: "Labels (top 10)",
     stats_by_decade: "By release decade",
+    stats_by_added_year: "By year added",
     stats_no_data: "No data.",
   },
   fr: {
@@ -127,6 +132,7 @@ const I18N = {
     opt_sort_artist: "Artiste (A→Z)",
     opt_sort_year_desc: "Année (plus récent d'abord)",
     opt_sort_label: "Label (A→Z)",
+    opt_sort_date_added: "Date d'ajout (plus récent d'abord)",
     list_view_list: "☰ Liste",
     list_view_grid: "▦ Grille",
     list_prev: "‹ Préc.",
@@ -156,10 +162,12 @@ const I18N = {
     detail_field_rating: "Note",
     detail_field_notes: "Notes",
     detail_field_upc: "UPC",
+    detail_field_date_added: "Date d'ajout",
     detail_disc: "Disque {n}",
     detail_tracks: "Pistes",
     delete_confirm: 'Supprimer « {title} » ? Cette action est irréversible (une sauvegarde est faite au préalable).',
     delete_failed: "Échec de la suppression : {err}",
+    cover_set_failed: "Échec de la mise à jour de la pochette : {err}",
     form_title_add: "Ajouter un album",
     form_title_edit: "Modifier l'album",
     form_label_title: "Titre",
@@ -188,12 +196,14 @@ const I18N = {
     stats_albums: "{n} album(s)",
     stats_tracks: "{n} piste(s)",
     stats_no_cover: "{n} sans pochette",
+    stats_add_cover_hint: "Cliquer pour ajouter une pochette",
     stats_no_artist: "{n} sans artiste",
     stats_genres: "Genres",
     stats_formats: "Formats",
     stats_countries: "Pays",
     stats_labels_top10: "Labels (top 10)",
     stats_by_decade: "Par décennie de sortie",
+    stats_by_added_year: "Par année d'ajout",
     stats_no_data: "Aucune donnée.",
   },
 };
@@ -590,6 +600,7 @@ function showDetail(id) {
       ${field(t("detail_field_rating"), a.rating != null ? String(a.rating) : "")}
       ${field(t("detail_field_notes"), a.notes)}
       ${field(t("detail_field_upc"), a.upc)}
+      ${field(t("detail_field_date_added"), a.date_added)}
     </dl>
     ${discs}
   `;
@@ -616,6 +627,7 @@ const SORT_PRESETS = {
   artist: { key: "artists", asc: true },
   year_desc: { key: "release_year", asc: false },
   label: { key: "label", asc: true },
+  date_added_desc: { key: "date_added", asc: false },
 };
 
 const sortEl = document.getElementById("sort");
@@ -705,6 +717,18 @@ document.getElementById("open-collection").addEventListener("click", () => {
   invoke("pick_collection");
 });
 
+window.__TAURI__.event.listen("cover-set", () => {
+  // Reloads the whole collection (simplest way to pick up the new
+  // front_cover everywhere it's shown — table/grid thumbnails, detail
+  // panel, the stats "no cover" list/count itself) rather than patching
+  // just the one album in local state.
+  loadCollection(currentPath);
+});
+
+window.__TAURI__.event.listen("cover-set-error", (event) => {
+  alert(t("cover_set_failed", { err: event.payload }));
+});
+
 // --- Statistics ----------------------------------------------------------
 // Mirrors BookNojo's own computeStats()/renderStats()/barList() pattern,
 // adapted to Album's fields instead of Book's.
@@ -726,16 +750,31 @@ function computeStats() {
     const d = Math.floor(y / 10) * 10;
     decades.set(d, (decades.get(d) || 0) + 1);
   }
+  const addedYears = new Map();
+  for (const a of scoped) {
+    if (!a.date_added) continue;
+    const y = a.date_added.slice(0, 4);
+    addedYears.set(y, (addedYears.get(y) || 0) + 1);
+  }
+  const noCoverAlbums = scoped
+    .filter((a) => !a.front_cover)
+    .sort((a, b) => a.title.localeCompare(b.title));
+  const noArtistAlbums = scoped
+    .filter((a) => !(a.artists && a.artists.length))
+    .sort((a, b) => a.title.localeCompare(b.title));
   return {
     totalAlbums: scoped.length,
     totalTracks: scoped.reduce((s, a) => s + (a.track_count || 0), 0),
-    noCover: scoped.filter((a) => !a.front_cover).length,
-    noArtist: scoped.filter((a) => !(a.artists && a.artists.length)).length,
+    noCover: noCoverAlbums.length,
+    noArtist: noArtistAlbums.length,
+    noCoverAlbums,
+    noArtistAlbums,
     genres: tally((a) => a.genres || []),
     formats: tally((a) => (a.format ? [a.format] : [])),
     countries: tally((a) => (a.country ? [a.country] : [])),
     labels: tally((a) => (a.label ? [a.label] : [])),
     decades: [...decades.entries()].sort((a, b) => a[0] - b[0]).map(([d, c]) => [`${d}s`, c]),
+    addedYears: [...addedYears.entries()].sort((a, b) => a[0].localeCompare(b[0])),
   };
 }
 
@@ -755,25 +794,80 @@ function barList(title, entries, limit) {
   return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || `<p class="stat-empty">${escapeHtml(t("stats_no_data"))}</p>`}</div>`;
 }
 
+// Which "N with no cover"/"N with no artist" summary items are
+// currently expanded in the stats panel — a plain module-level Set
+// rather than per-call state, so it survives the full-innerHTML
+// re-render renderStats() does on every toggle/language switch/tab
+// change.
+const statsExpanded = new Set();
+
+// `clickableForCover`: the "no cover" list's entries double as a
+// shortcut into pick_and_set_cover (user asked for exactly this — "ça
+// serait pratique pour ajouter facilement la pochette manquante"); the
+// "no artist" list reuses the same renderer but stays plain, since
+// there's no equivalent one-click action for a missing artist.
+function albumListHtml(albums, clickableForCover) {
+  if (!albums.length) return `<p class="stat-empty">${escapeHtml(t("stats_no_data"))}</p>`;
+  return `<ul class="stat-detail-list">${albums
+    .map((a) => {
+      const label = `${escapeHtml(a.artists.join(", ") || "—")} — ${escapeHtml(a.title)}`;
+      return clickableForCover
+        ? `<li class="clickable" data-album-id="${a.id}" title="${escapeHtml(t("stats_add_cover_hint"))}">${label}</li>`
+        : `<li>${label}</li>`;
+    })
+    .join("")}</ul>`;
+}
+
+// A summary item whose count can be clicked to expand/collapse an
+// Artist — Title list of the matching albums, right below the summary
+// row (user asked specifically for "sans pochette" to do this; "sans
+// artiste" gets the same treatment for consistency, same mechanism).
+function statLink(key, labelKey, n) {
+  const expanded = statsExpanded.has(key);
+  return `<span class="stat-link${expanded ? " expanded" : ""}" data-stat-key="${key}">${t(labelKey, { n: `<strong>${n}</strong>` })}</span>`;
+}
+
 function renderStats() {
   const s = computeStats();
+  const detailBlock = (key, labelKey, n, albums, clickableForCover) => {
+    if (!statsExpanded.has(key)) return "";
+    return `<div class="stat-detail"><h4>${escapeHtml(t(labelKey, { n }))}</h4>${albumListHtml(albums, clickableForCover)}</div>`;
+  };
   document.getElementById("stats-pane").innerHTML = `
     <div class="stats-wrap">
       <h2>${escapeHtml(t("stats_title", { name: collectionLabel(currentCollection) }))}</h2>
       <div class="stat-summary">
         <span>${t("stats_albums", { n: `<strong>${s.totalAlbums}</strong>` })}</span>
         <span>${t("stats_tracks", { n: `<strong>${s.totalTracks}</strong>` })}</span>
-        <span>${t("stats_no_cover", { n: `<strong>${s.noCover}</strong>` })}</span>
-        <span>${t("stats_no_artist", { n: `<strong>${s.noArtist}</strong>` })}</span>
+        ${statLink("noCover", "stats_no_cover", s.noCover)}
+        ${statLink("noArtist", "stats_no_artist", s.noArtist)}
       </div>
+      ${detailBlock("noCover", "stats_no_cover", s.noCover, s.noCoverAlbums, true)}
+      ${detailBlock("noArtist", "stats_no_artist", s.noArtist, s.noArtistAlbums, false)}
       <div class="stat-grid">
         ${barList(t("stats_genres"), s.genres, 15)}
         ${barList(t("stats_formats"), s.formats)}
         ${barList(t("stats_countries"), s.countries)}
         ${barList(t("stats_labels_top10"), s.labels, 10)}
         ${barList(t("stats_by_decade"), s.decades)}
+        ${barList(t("stats_by_added_year"), s.addedYears)}
       </div>
     </div>`;
+  document.querySelectorAll(".stat-link").forEach((el) =>
+    el.addEventListener("click", () => {
+      const key = el.dataset.statKey;
+      if (statsExpanded.has(key)) statsExpanded.delete(key);
+      else statsExpanded.add(key);
+      renderStats();
+    })
+  );
+  document.querySelectorAll(".stat-detail-list li.clickable").forEach((el) =>
+    el.addEventListener("click", () => {
+      // Fire-and-forget: the picker is async on the Rust side, result
+      // arrives later as a "cover-set"/"cover-set-error" event.
+      invoke("pick_and_set_cover", { path: currentPath, id: Number(el.dataset.albumId) });
+    })
+  );
 }
 
 const statsBtnEl = document.getElementById("stats-btn");
