@@ -762,6 +762,12 @@ pub struct AlbumFields {
     pub notes: Option<String>,
     #[arg(long)]
     pub upc: Option<String>,
+    /// Must already exist (one of Music Collector's own named
+    /// sub-collections, e.g. a default collection plus any the user
+    /// created) — this never creates a new one, same restriction
+    /// BookNojo's own bc_add has for a book's sub-collection.
+    #[arg(long)]
+    pub collection: Option<String>,
 }
 
 /// Artist/Composer/Conductor/Musician/Orchestra/Chorus each have their
@@ -1376,7 +1382,22 @@ fn resolve_simple_fields(
         let id = resolve_or_create_person(conn, pks, sql, "ZOWNER", "Owner", ENT_OWNER, "ZOWNER", name)?;
         ids.insert("owner", id);
     }
+    if let Some(name) = fields.collection.as_deref() {
+        let id = resolve_collection_pk(conn, name)?;
+        ids.insert("collection", id);
+    }
     Ok(ids)
+}
+
+/// A sub-collection resolves by exact title match only — unlike every
+/// other lookup field, there is no resolve-or-*create* here: an
+/// album's sub-collection is always one the app/CLI caller already
+/// knows exists (it comes from a list of real, already-loaded tabs),
+/// never free-typed, so creating one on a miss would only ever mask a
+/// caller bug.
+fn resolve_collection_pk(conn: &Connection, name: &str) -> Result<i64> {
+    conn.query_row("SELECT Z_PK FROM ZCOLLECTION WHERE ZTITLE = ?1", [name], |row| row.get(0))
+        .with_context(|| format!("sous-collection « {name} » introuvable — elle doit déjà exister"))
 }
 
 fn scalar_text_assignments(fields: &AlbumFields) -> Vec<(&'static str, String)> {
@@ -1575,6 +1596,7 @@ pub fn build_plan(
         ("spars", "ZSPARS"),
         ("owner", "ZOWNER"),
         ("location", "ZLOCATION"),
+        ("collection", "ZCOLLECTION"),
     ] {
         if let Some(id) = lookup_ids.get(key) {
             columns.push(column.to_string());

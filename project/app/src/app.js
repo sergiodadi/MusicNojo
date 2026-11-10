@@ -955,6 +955,7 @@ function emptyAlbumFields() {
     rating: null,
     notes: null,
     upc: null,
+    collection: null,
   };
 }
 
@@ -1043,6 +1044,15 @@ form.addEventListener("submit", async (e) => {
   fields.rating = data.get("rating") ? Number(data.get("rating")) : null;
   fields.upc = data.get("upc") || null;
   fields.notes = data.get("notes") || null;
+  // A new album lands in whichever tab is active when it's added — not
+  // the fallback "no sub-collection" bucket — matching the intuitive
+  // expectation (user-reported: added albums while viewing one
+  // sub-collection's tab, found them under the fallback one instead).
+  // Only for "add": edit doesn't offer changing an album's
+  // sub-collection yet.
+  if (form.dataset.mode !== "edit" && currentCollection !== DEFAULT_COLLECTION_KEY) {
+    fields.collection = currentCollection;
+  }
 
   const tracks = data
     .get("tracks")

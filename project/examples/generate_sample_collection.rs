@@ -551,6 +551,7 @@ fn main() -> Result<()> {
             rating: album.rating,
             notes: opt(album.notes),
             upc: opt(album.upc),
+            collection: None,
         };
         let tracks: Vec<String> = album.tracks.iter().map(|s| s.to_string()).collect();
         let plan = build_plan(&conn, album.title, &roles, &many, &fields, &tracks)?;
