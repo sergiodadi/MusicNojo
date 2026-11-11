@@ -105,3 +105,130 @@ project/
 ├─ Cargo.toml         manifeste du crate racine (music_collector_export)
 └─ refresh-testdata*.sh   scripts de données de test
 ```
+
+## Annexe : modèle de données Music Collector
+
+> ⚠️ **Donné à titre indicatif** — ce catalogue de champs peut être
+> inexact ou incomplet. Il décrit l'export XML intégré de Music
+> Collector (menu Export, format XML), pas le format de stockage réel
+> utilisé par le reste de ce projet.
+
+Chaque album exporté en XML déclare, en tête de fichier, la liste des
+champs qu'il connaît (balise `<field name="..." id="..." label="...">`).
+95 champs au total, dans l'ordre où Music Collector les déclare :
+
+| Internal ID | Label |
+|---|---|
+| `dfTitleSort` | Title Sort |
+| `dfArtist` | Artist |
+| `dfSubTitle` | SubTitle |
+| `dfReleaseDate` | Release Date |
+| `dfMyRating` | My Rating |
+| `dfLabel` | Label |
+| `dfOrigReleaseDate` | Orig. Rel. Date |
+| `dfReleaseYear` | Release Year |
+| `dfTourname` | Tourname |
+| `dfLabelNumber` | Cat. Number |
+| `dfPosition` | Position |
+| `dfComposer` | Composer |
+| `dfOrigReleaseYear` | Original Release Year |
+| `dfSpars` | Spars |
+| `dfUPC` | UPC (Barcode) |
+| `dfComposition` | Composition |
+| `dfInstrument` | Instrument |
+| `dfCountry` | Country |
+| `dfFormat` | Format |
+| `dfCondition` | Package/Sleeve Condition |
+| `dfConductor` | Conductor |
+| `dfRecordingYear` | Recording Year |
+| `dfSound` | Sound |
+| `dfPackaging` | Packaging |
+| `dfCurrentValue` | Current Value |
+| `dfOrchestra` | Orchestra |
+| `dfPurchaseYear` | Purchase Year |
+| `dfExtras` | Extras |
+| `dfGenre` | Genre |
+| `dfRare` | Rare |
+| `dfChorus` | Chorus |
+| `dfNotes` | Notes |
+| `dfImageLinks` | Image Files |
+| `dfOwner` | Owner |
+| `dfArtistFirstLetter` | Artist First Letter |
+| `dfStudio` | Studio |
+| `dfOnlineLinks` | Online Links |
+| `dfMovieLinks` | Movie Files |
+| `dfLocation` | Location |
+| `dfVinylColor` | Vinyl Color |
+| `dfRecordingDate` | Rec. Date |
+| `dfLocalLinks` | Local Links |
+| `dfOtherLinks` | Other Files |
+| `dfPurchaseDate` | Purchase Date |
+| `dfTrackText1` | Track Text1 |
+| `dfLoaner` | Loaned To |
+| `dfVinylWeight` | Vinyl Weight |
+| `dfIndex` | Index |
+| `dfPlaylistLinks` | Playlist Files |
+| `dfPrice` | Purchase Price |
+| `dfLoanDate` | Loan Date |
+| `dfRPM` | RPM |
+| `dfQuantity` | Quantity |
+| `dfStore` | Store |
+| `dfMusicFile` | Music File |
+| `dfDueDate` | Due Date |
+| `dfTag` | Tags |
+| `dfCollectionStatus` | Collection Status |
+| `dfMediaCondition` | Media Condition |
+| `dfRating` | My Rating |
+| `dfLyricsFile` | Lyrics File |
+| `dfIsOverdue` | isOverdue |
+| `dfMusician` | Musician |
+| `dfLinks` | Online Links |
+| `dfClzAlbumID` | Clz Album ID |
+| `dfStorageDevice` | Storage Device |
+| `dfReturnDate` | Return Date |
+| `dfCredit` | Credits |
+| `dfLive` | Live |
+| `dfLastModified` | Last Modified |
+| `dfSlot` | Slot |
+| `dfLoanNotes` | Loan Notes |
+| `dfSyncFrontCover` | Custom Image |
+| `dfLength` | Length |
+| `dfSongwriter` | Songwriter |
+| `dfCoverFront` | Front Cover |
+| `dfLoanEmail` | Loaned To Email |
+| `dfAddedDate` | Added Date |
+| `dfBPM` | BPM |
+| `dfProducer` | Producer |
+| `dfCoverBack` | Back Cover |
+| `dfLoanAddress` | Loaned To Address |
+| `dfCollection` | Collection |
+| `dfEngineer` | Engineer |
+| `dfBoxSet` | Box Set |
+| `dfLoanTitle` | Loan Title |
+| `dfSyncBackCover` | Custom Back Cover |
+| `dfUserCredit1` | User Credit 1 |
+| `dfBackdrop` | Backdrop |
+| `dfUserCredit2` | User Credit 2 |
+| `dfTitle` | Title |
+| `dfKey` | Key |
+| `dfThumbFilePath` | Thumbnail |
+| `dfBPAlbumID` | ClzAlbumID |
+| `dfBPMusicLastReceivedRevision` | BPMusicLastReceivedVersion |
+
+Chaque album, au-delà des champs simples ci-dessus, contient aussi des
+listes répétables (un album peut avoir plusieurs artistes, plusieurs
+crédits, etc.) et une hiérarchie disque/piste imbriquée :
+
+- `<artists>` → `<artist>` (nom affiché, nom de tri, prénom, nom) —
+  même structure pour `<composers>`, `<conductors>`, `<musicians>`,
+  `<orchestras>`, `<choruses>`, chacun sa propre liste de rôle dédiée.
+- `<credits>` → crédits génériques (rôle + personne), `<compositions>`
+  → œuvres classiques.
+- `<genres>`, `<studios>`, `<tags>`, `<sounds>` → listes de valeurs
+  simples (nom affiché + nom de tri).
+- `<links>`, `<onlinelinks>`, `<locallinks>`, `<otherlinks>`,
+  `<playlistlinks>`, `<movielinks>`, `<imagelinks>` → liens fichier/URL.
+- `<details>` → enregistrements imbriqués au niveau disque
+  (`type="disc"`) et piste (`type="track"`), chacun contenant
+  récursivement la même structure par élément (ses propres artistes/
+  genres/etc., rarement utilisée en pratique au niveau piste).
