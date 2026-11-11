@@ -762,6 +762,7 @@ async function loadCollection(path) {
   try {
     const resp = await invoke("list_albums", { path });
     albums = resp.albums;
+    populateDatalists();
     imagesDir = resp.images_dir;
     // The command's own echoed-back path, never null — add_album/
     // edit_album/delete_album require a concrete path, and the initial
@@ -971,6 +972,42 @@ function splitList(value) {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+// Suggests values already used in the collection as you type in the
+// add/edit form — same purpose as BookNojo's own <datalist> fields
+// (author, publisher, genre, format, ...), catching a near-duplicate
+// before it becomes a permanent new taxonomy entry at the typing
+// stage, ahead of the add-preview's after-the-fact "new" badge.
+const DATALIST_FIELDS = [
+  ["dl-artists", "artists"],
+  ["dl-composers", "composers"],
+  ["dl-conductors", "conductors"],
+  ["dl-musicians", "musicians"],
+  ["dl-orchestras", "orchestras"],
+  ["dl-choruses", "choruses"],
+  ["dl-genres", "genres"],
+  ["dl-tags", "tags"],
+  ["dl-extras", "extras"],
+  ["dl-studios", "studios"],
+  ["dl-format", "format"],
+  ["dl-label", "label"],
+  ["dl-country", "country"],
+];
+
+function populateDatalists() {
+  for (const [id, field] of DATALIST_FIELDS) {
+    const values = new Set();
+    for (const a of albums) {
+      const v = a[field];
+      if (Array.isArray(v)) v.forEach((x) => x && values.add(x));
+      else if (v) values.add(v);
+    }
+    document.getElementById(id).innerHTML = [...values]
+      .sort((a, b) => a.localeCompare(b))
+      .map((v) => `<option value="${escapeHtml(v)}"></option>`)
+      .join("");
+  }
 }
 
 function emptyRoleInputs() {
