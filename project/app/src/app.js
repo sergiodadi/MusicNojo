@@ -73,6 +73,8 @@ const I18N = {
     detail_field_notes: "Notes",
     detail_field_upc: "UPC",
     detail_field_date_added: "Date added",
+    detail_field_track_count: "Tracks",
+    detail_field_duration: "Duration",
     detail_disc: "Disc {n}",
     detail_tracks: "Tracks",
     delete_confirm: 'Delete "{title}"? This cannot be undone (a backup is made first).',
@@ -175,6 +177,8 @@ const I18N = {
     detail_field_notes: "Notes",
     detail_field_upc: "UPC",
     detail_field_date_added: "Date d'ajout",
+    detail_field_track_count: "Pistes",
+    detail_field_duration: "Durée",
     detail_disc: "Disque {n}",
     detail_tracks: "Pistes",
     delete_confirm: 'Supprimer « {title} » ? Cette action est irréversible (une sauvegarde est faite au préalable).',
@@ -627,6 +631,32 @@ function field(label, value) {
   return value ? `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>` : "";
 }
 
+function albumTrackCount(a) {
+  return a.discs.reduce((n, disc) => n + disc.tracks.length, 0);
+}
+
+function albumDurationSeconds(a) {
+  let total = 0;
+  a.discs.forEach((disc) =>
+    disc.tracks.forEach((tr) => {
+      if (!tr.length) return;
+      const parts = tr.length.split(":").map(Number);
+      if (parts.some((p) => Number.isNaN(p))) return;
+      total += parts.reduce((secs, p) => secs * 60 + p, 0);
+    })
+  );
+  return total;
+}
+
+function formatDuration(totalSeconds) {
+  if (!totalSeconds) return "";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const ss = String(s).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+}
+
 function showDetail(id) {
   currentDetailId = id;
   const a = albums.find((x) => x.id === id);
@@ -649,11 +679,34 @@ function showDetail(id) {
   const front = coverSrc(a.front_cover);
   const cover = front ? `<img class="cover" src="${front}" alt="">` : "";
 
+  const artistLine =
+    a.artists && a.artists.length
+      ? a.artists
+          .map(
+            (n) =>
+              `<span class="tag-link" data-group-field="artists" data-value="${escapeHtml(n)}">${escapeHtml(n)}</span>`
+          )
+          .join(", ")
+      : "";
+
+  const duration = formatDuration(albumDurationSeconds(a));
+  const trackCount = albumTrackCount(a);
+
   document.getElementById("detail-content").innerHTML = `
-    ${cover}
-    <h2>${escapeHtml(a.title)}</h2>
+    <div class="detail-title-block">
+      ${artistLine ? `<div class="detail-artist">${artistLine}</div>` : ""}
+      <h2>${escapeHtml(a.title)}</h2>
+    </div>
+    <div class="detail-top">
+      ${cover}
+      <dl class="detail-meta">
+        ${field(t("detail_field_upc"), a.upc)}
+        ${field(t("detail_field_track_count"), trackCount ? String(trackCount) : "")}
+        ${field(t("detail_field_duration"), duration)}
+        ${field(t("detail_field_format"), a.format)}
+      </dl>
+    </div>
     <dl>
-      ${clickableRoleList(t("detail_field_artists"), a.artists, "artists")}
       ${roleList(t("detail_field_composers"), a.composers)}
       ${roleList(t("detail_field_conductors"), a.conductors)}
       ${roleList(t("detail_field_musicians"), a.musicians)}
@@ -662,12 +715,10 @@ function showDetail(id) {
       ${clickableRoleList(t("detail_field_genres"), a.genres, "genres")}
       ${roleList(t("detail_field_tags"), a.tags)}
       ${field(t("detail_field_label"), a.label)}
-      ${field(t("detail_field_format"), a.format)}
       ${field(t("detail_field_country"), a.country)}
       ${field(t("detail_field_year"), a.release_year)}
       ${field(t("detail_field_rating"), a.rating != null ? String(a.rating) : "")}
       ${field(t("detail_field_notes"), a.notes)}
-      ${field(t("detail_field_upc"), a.upc)}
       ${field(t("detail_field_date_added"), a.date_added)}
     </dl>
     ${discs}

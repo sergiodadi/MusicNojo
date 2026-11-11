@@ -490,17 +490,34 @@ tr:hover td {
   font-style: italic;
 }
 
+#detail-content .detail-title-block {
+  margin: 0 1.5rem 0.75rem 0;
+}
+
+#detail-content .detail-artist {
+  font-size: 0.9rem;
+  color: #555;
+  margin-bottom: 0.15rem;
+}
+
+#detail-content h2 {
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+#detail-content .detail-top {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
 #detail-content .cover {
   width: 220px;
   height: 220px;
   object-fit: cover;
   border-radius: 4px;
-  margin-bottom: 0.75rem;
-}
-
-#detail-content h2 {
-  font-size: 1.05rem;
-  margin: 0 1.5rem 0.75rem 0;
+  flex-shrink: 0;
 }
 
 #detail-content dl {
@@ -509,6 +526,11 @@ tr:hover td {
   gap: 0.25rem 0.5rem;
   font-size: 0.9rem;
   margin: 0 0 1rem 0;
+}
+
+#detail-content dl.detail-meta {
+  margin: 0;
+  align-content: start;
 }
 
 #detail-content dt {
