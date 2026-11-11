@@ -15,6 +15,13 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 /// and same reasoning as BookNojo's own SUPPORTED_BKCP_VERSION.
 const SUPPORTED_MUCP_VERSION: &str = "20.3.2";
 
+/// The version shown to the user (header badge, "About MusicNojo"),
+/// deliberately *not* `CARGO_PKG_VERSION` — Cargo.toml's version bumps on
+/// every single internal commit, while this tracks the latest published
+/// `.dmg` release tag instead, which is what the user actually downloaded.
+/// Update this by hand whenever a new release is tagged/published.
+const DISPLAY_VERSION: &str = "1.0.0b3";
+
 /// Reads the Music Collector version that created a `.mucp` package,
 /// from its own `preferences.plist` (key `kPreferencesApplicationVersion`).
 /// Uses `plutil -extract ... raw` (a single key) rather than
@@ -99,10 +106,11 @@ fn resolve_collection_path(path: Option<String>) -> std::path::PathBuf {
 
 /// The app's HTML shell has no build step to burn a version string into it,
 /// so the frontend asks for it over IPC instead — same pattern as BookNojo's
-/// own `app_version` command.
+/// own `app_version` command (which returns `CARGO_PKG_VERSION` directly;
+/// this one returns `DISPLAY_VERSION` instead, see its own doc comment).
 #[tauri::command]
 fn app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    DISPLAY_VERSION.to_string()
 }
 
 #[tauri::command]
@@ -434,7 +442,15 @@ mod tests {
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     #[cfg(target_os = "macos")]
     let app_menu = SubmenuBuilder::new(app, "MusicNojo")
-        .about(None)
+        .about(Some(tauri::menu::AboutMetadata {
+            // Overrides the bundle's own CFBundleShortVersionString/
+            // CFBundleVersion (still `CARGO_PKG_VERSION`/Cargo.toml's
+            // per-commit dev version) with DISPLAY_VERSION, same reasoning
+            // as the custom "About MusicNojo" dialog below.
+            version: Some(DISPLAY_VERSION.to_string()),
+            short_version: Some(DISPLAY_VERSION.to_string()),
+            ..Default::default()
+        }))
         .separator()
         .hide()
         .hide_others()
@@ -507,7 +523,7 @@ pub fn run() {
             "open_collection" => pick_collection(app.clone()),
             "about_musicnojo" => {
                 app.dialog()
-                    .message(format!("MusicNojo\nVersion {}", env!("CARGO_PKG_VERSION")))
+                    .message(format!("MusicNojo\nVersion {}", DISPLAY_VERSION))
                     .title("About MusicNojo")
                     .show(|_| {});
             }
