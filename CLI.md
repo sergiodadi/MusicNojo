@@ -59,19 +59,38 @@ The counter shown by the application is the **sum of quantities** for
 the active sub-collection, not the number of records — the two values
 can legitimately differ.
 
-## 3. The HTML export
+## 3. The interactive HTML page
 
 ```bash
 ./mc_export --db "<path>" --html music_collection.html
 ```
 
-Opens in any browser (double-click, or `open`), no server needed. A
-single page: a search box (title/artist) and a sortable table (title,
-artists, genres, format, country, release year, track count) — a
-simple, static summary. It does **not** reproduce the application's
-full interface (no grouping sidebar, no tabs, no statistics, no
-add/edit form, no cover images) — for that, use the application itself
-(see [`MANUAL.md`](MANUAL.md)).
+Opens in any browser (double-click, or `open`), no server needed —
+including cover images, referenced as local `file://` URLs. Three
+zones, like the application:
+
+- **on the left**: grouping (Artist by default, or Genre/Format/
+  Country/Label via the dropdown menu), with an A→Z bar. Clicking the
+  number next to "All" toggles the value list between alphabetical
+  order and descending album-count order.
+- **top right**: the list of albums in the selected group — search,
+  sort, pagination, list/grid view toggle.
+- **bottom right**: the detail card (cover, metadata, clickable
+  artist/genre values that jump back into the groups panel).
+
+The tabs at the top switch sub-collection without re-running the
+command. The **Statistics** button shows an aggregated view (genres,
+formats, countries, labels, decades, year added) for the active
+sub-collection, including the same "no cover"/"no artist" expandable
+lists the application has (read-only here — no click-to-fix, since
+this page can't write anything).
+
+English only (no language toggle), and there is **no add/edit/delete
+form** — unlike BookNojo's own static export, which has a
+preview-only form that downloads a JSON file for its CLI tool to
+read. `mc_add` already covers adding/editing/deleting directly and
+more safely (a reviewable plan before any real write), so a
+JSON-download detour wouldn't add anything here.
 
 ## 4. `mc_add` — adding, editing, deleting, covers
 

@@ -63,20 +63,40 @@ Le compteur affiché par l'application est la **somme des quantités**
 de la sous-collection active, pas le nombre de fiches — les deux
 valeurs peuvent légitimement différer.
 
-## 3. L'export HTML
+## 3. La page HTML interactive
 
 ```bash
 ./mc_export --db "<chemin>" --html music_collection.html
 ```
 
 S'ouvre dans n'importe quel navigateur (double-clic, ou `open`), sans
-serveur. Une seule page : un champ de recherche (titre/artiste) et un
-tableau triable (titre, artistes, genres, format, pays, année de
-sortie, nombre de pistes) — un résumé simple et statique. Il ne
-reproduit **pas** l'interface complète de l'application (pas de
-panneau de regroupement, pas d'onglets, pas de statistiques, pas de
-formulaire d'ajout/modification, pas de pochettes) — pour cela,
-utiliser l'application elle-même (voir [`MANUAL.fr.md`](MANUAL.fr.md)).
+serveur — pochettes comprises, référencées comme des URL `file://`
+locales. Trois zones, comme l'application :
+
+- **à gauche** : regroupement (Artiste par défaut, ou Genre/Format/
+  Pays/Label via le menu déroulant), avec une barre A→Z. Cliquer sur
+  le nombre à côté de "All" bascule la liste des valeurs entre ordre
+  alphabétique et ordre décroissant par nombre d'albums.
+- **en haut à droite** : la liste des albums du groupe sélectionné —
+  recherche, tri, pagination, bascule vue liste/grille.
+- **en bas à droite** : la fiche détail (pochette, métadonnées,
+  valeurs artiste/genre cliquables qui renvoient vers le panneau de
+  regroupement).
+
+Les onglets en haut changent de sous-collection sans relancer la
+commande. Le bouton **Statistics** affiche une vue agrégée (genres,
+formats, pays, labels, décennies, année d'ajout) pour la
+sous-collection active, avec les mêmes listes déroulantes "sans
+pochette"/"sans artiste" que l'application (en lecture seule ici —
+pas de correction en un clic, cette page ne pouvant rien écrire).
+
+Anglais uniquement (pas de bascule de langue), et il n'y a **pas de
+formulaire d'ajout/modification/suppression** — contrairement à
+l'export statique de BookNojo, qui a un formulaire d'aperçu
+téléchargeant un JSON pour son outil en ligne de commande. `mc_add`
+couvre déjà l'ajout/la modification/la suppression directement et
+plus sûrement (un plan à relire avant toute écriture réelle), donc un
+détour par un JSON téléchargé n'apporterait rien ici.
 
 ## 4. `mc_add` — ajout, modification, suppression, pochettes
 

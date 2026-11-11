@@ -515,101 +515,642 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
     Ok(albums)
 }
 
-pub fn write_html(path: &Path, albums: &[Album]) -> Result<()> {
-    #[derive(Serialize)]
-    struct Row<'a> {
-        title: &'a str,
-        artists: String,
-        genres: String,
-        format: &'a str,
-        country: &'a str,
-        release_year: &'a str,
-        track_count: i64,
-    }
+const STATIC_EXPORT_CSS: &str = r##"
+body { font-family: -apple-system, system-ui, sans-serif; margin: 0; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; row-gap: 0.5rem; padding: 0.75rem 1rem; border-bottom: 1px solid #ddd; background: #fff; flex-shrink: 0; }
+header h1 { font-size: 1.1rem; margin: 0; flex-shrink: 0; }
+#search { flex: 1 1 12rem; min-width: 8rem; max-width: 24rem; font-size: 1rem; padding: 0.4rem 0.6rem; }
+#count { color: #666; font-size: 0.85rem; flex-shrink: 0; margin-left: auto; }
+#stats-btn { padding: 0.4rem 0.8rem; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
+#stats-btn.active { background: #6a7fe0; color: #fff; border-color: #6a7fe0; }
+#tabs { display: flex; gap: 0.4rem; padding: 0.4rem 1rem; overflow-x: auto; background: #f0f2ff; border-bottom: 1px solid #ddd; flex-shrink: 0; }
+#tabs .tab { flex: 0 0 auto; padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; cursor: pointer; background: #e4e9ff; border: 1px solid #c3d2f7; color: #2e4bb0; }
+#tabs .tab:hover { background: #dce5fb; border-color: #6a7fe0; }
+#tabs .tab .n { color: #2e4bb0; opacity: 0.7; margin-left: 0.3rem; }
+#tabs .tab.active { background: #6a7fe0; border-color: #6a7fe0; color: #fff; font-weight: 600; }
+#tabs .tab.active .n { color: #dce8ff; opacity: 1; }
+#main { display: flex; flex: 1; min-height: 0; }
+#groups { width: 14rem; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; background: #fbfbfc; border-right: 1px solid #ddd; }
+#right-col { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#list-pane { flex: 0 0 55%; display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+#group-field { margin: 0.6rem; padding: 0.3rem; }
+#azbar { display: flex; flex-wrap: wrap; gap: 2px; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; flex-shrink: 0; }
+#azbar button { border: 1px solid transparent; background: none; font-size: 0.7rem; font-weight: 600; color: #888; padding: 0.1rem 0.25rem; border-radius: 4px; cursor: pointer; min-width: 1.1rem; }
+#azbar button:hover { background: #f5f7ff; color: #1a1a1a; }
+#azbar button.active { background: #6a7fe0; color: #fff; }
+#group-list { flex: 1; overflow-y: auto; }
+#group-list div { padding: 0.35rem 0.8rem; cursor: pointer; font-size: 0.9rem; display: flex; justify-content: space-between; gap: 0.5rem; }
+#group-list div:hover { background: #f5f7ff; }
+#group-list div.selected { background: #e4e9ff; font-weight: 600; }
+#group-list .group-count { color: #888; font-size: 0.8rem; }
+#group-list .group-count.sortable { cursor: pointer; padding: 0.05rem 0.35rem; border-radius: 999px; }
+#group-list .group-count.sortable:hover { background: #e4e9ff; color: #2e4bb0; }
+#group-list .group-count.sort-active { background: #6a7fe0; color: #fff; }
+#list-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.8rem; border-bottom: 1px solid #eee; background: #fafafa; flex-shrink: 0; }
+#sort { padding: 0.25rem 0.4rem; font-size: 0.85rem; }
+#view-toggle { display: flex; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+#view-toggle button { border: none; background: #fff; padding: 0.25rem 0.5rem; font-size: 0.8rem; cursor: pointer; color: #666; }
+#view-toggle button:hover { background: #f5f7ff; color: #1a1a1a; }
+#view-toggle button + button { border-left: 1px solid #ddd; }
+#view-toggle button.active { background: #6a7fe0; color: #fff; }
+#grid-view { display: none; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.8rem; padding: 0.8rem; align-content: start; overflow-y: auto; flex: 1; min-height: 0; }
+#list-pane.view-grid table { display: none; }
+#list-pane.view-grid #grid-view { display: grid; }
+.grid-tile { cursor: pointer; border-radius: 6px; padding: 0.3rem; }
+.grid-tile:hover, .grid-tile.active { background: #f0f2ff; }
+.grid-tile .thumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; background: #e4e4e8; display: block; }
+.grid-tile .t { font-size: 0.8rem; font-weight: 600; margin-top: 0.3rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grid-tile .a { font-size: 0.72rem; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#pager { display: flex; align-items: center; justify-content: center; gap: 0.8rem; padding: 0.4rem; border-top: 1px solid #eee; background: #fafafa; flex-shrink: 0; font-size: 0.8rem; }
+#pager button { padding: 0.25rem 0.6rem; cursor: pointer; }
+#pager button:disabled { cursor: default; opacity: 0.4; }
+#page-info { color: #666; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 0.4rem 0.8rem; border-bottom: 1px solid #eee; }
+th { cursor: pointer; user-select: none; background: #fafafa; position: sticky; top: 0; }
+tbody tr { cursor: pointer; }
+tr:hover td { background: #f5f7ff; }
+#detail { flex: 1; min-height: 0; padding: 1rem; overflow-y: auto; background: #fff; }
+#detail-empty { color: #888; font-style: italic; }
+#detail-content .cover { width: 220px; height: 220px; object-fit: cover; border-radius: 4px; margin-bottom: 0.75rem; }
+#detail-content h2 { font-size: 1.05rem; margin: 0 1.5rem 0.75rem 0; }
+#detail-content dl { display: grid; grid-template-columns: 6rem 1fr; gap: 0.25rem 0.5rem; font-size: 0.9rem; margin: 0 0 1rem 0; }
+#detail-content dt { color: #666; }
+#detail-content dd { margin: 0; }
+#detail-content .tag-link { cursor: pointer; border-bottom: 1px dashed #999; }
+#detail-content .tag-link:hover { color: #2e4bb0; border-bottom-color: #2e4bb0; }
+#detail-content ol { padding-left: 1.2rem; font-size: 0.9rem; }
+#detail-content .disc-heading { font-weight: 600; margin-top: 0.75rem; font-size: 0.85rem; color: #444; }
+#stats-pane { display: none; flex: 1; overflow-y: auto; background: #fbfbfc; padding: 1.5rem; min-height: 0; }
+body.panel-stats #main { display: none; }
+body.panel-stats #stats-pane { display: block; }
+.stats-wrap { max-width: 60rem; margin: 0 auto; }
+.stats-wrap h2 { font-size: 1.1rem; margin: 0 0 0.9rem; }
+.stat-summary { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.85rem; color: #666; margin-bottom: 1.2rem; }
+.stat-summary strong { color: #1a1a1a; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1.1rem; }
+.stat-block { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 0.9rem 1rem; }
+.stat-block h3 { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #888; margin: 0 0 0.6rem; }
+.stat-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; margin-bottom: 0.3rem; }
+.stat-row .label { width: 9rem; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-row .bar-wrap { flex: 1; background: #eceef2; border-radius: 3px; height: 0.6rem; overflow: hidden; }
+.stat-row .bar { display: block; background: #6a7fe0; height: 100%; }
+.stat-row .val { width: 2.3rem; text-align: right; color: #888; font-size: 0.7rem; flex-shrink: 0; }
+.stat-empty { font-size: 0.8rem; color: #888; }
+"##;
 
-    let rows: Vec<Row> = albums
+// Adapted from the Tauri app's own app.js: same groups/A-Z bar/tabs/
+// sort/list-grid/pagination/detail/stats logic, operating on the
+// embedded #data array instead of invoke() calls, with every write
+// action (add/edit/delete/set-cover) and the EN/FR toggle left out —
+// this page is read-only and English-only. mc_add already covers
+// writing, directly and more safely (a reviewable plan before any
+// commit), so there's no "download a JSON, pass it to mc_add" form
+// here either, unlike BookNojo's own static export.
+const STATIC_EXPORT_JS: &str = r##"
+const albums = JSON.parse(document.getElementById("data").textContent);
+let sortKey = "title", sortAsc = true, groupField = "artists", selectedGroup = null;
+let selectedLetter = null, groupSortByCount = false, viewMode = "list", page = 1;
+let currentDetailId = null, panel = "library";
+let collCounts = new Map(), collectionsList = [], currentCollection = null;
+const PAGE_SIZE = 60;
+const DEFAULT_COLLECTION_KEY = "__default__";
+
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function collectionKey(a) { return a.collection || DEFAULT_COLLECTION_KEY; }
+function collectionLabel(k) { return k === DEFAULT_COLLECTION_KEY ? "My Collection" : k; }
+function groupValues(a, field) {
+  const v = a[field];
+  if (Array.isArray(v)) return v;
+  return v ? [v] : [];
+}
+function letterOf(value) {
+  const ch = (value || "").trim().charAt(0).toUpperCase();
+  return /[A-Z]/.test(ch) ? ch : "#";
+}
+
+function computeCollections() {
+  collCounts = new Map();
+  for (const a of albums) {
+    const k = collectionKey(a);
+    collCounts.set(k, (collCounts.get(k) ?? 0) + 1);
+  }
+  collectionsList = [...collCounts.keys()].sort((a, b) =>
+    collCounts.get(b) - collCounts.get(a) || collectionLabel(a).localeCompare(collectionLabel(b)));
+  currentCollection = collectionsList[0] ?? null;
+}
+function renderTabs() {
+  const el = document.getElementById("tabs");
+  el.innerHTML = "";
+  for (const key of collectionsList) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (key === currentCollection ? " active" : "");
+    tab.innerHTML = `<span>${escapeHtml(collectionLabel(key))}</span><span class="n">${collCounts.get(key)}</span>`;
+    tab.addEventListener("click", () => {
+      if (key === currentCollection) return;
+      currentCollection = key;
+      selectedGroup = null; selectedLetter = null; page = 1;
+      renderTabs(); renderGroups(); render(document.getElementById("search").value);
+      if (panel === "stats") renderStats();
+    });
+    el.appendChild(tab);
+  }
+}
+
+function computeAvailableLetters() {
+  const set = new Set();
+  for (const a of albums) {
+    if (collectionKey(a) !== currentCollection) continue;
+    for (const v of groupValues(a, groupField)) if (v) set.add(letterOf(v));
+  }
+  return [...set].sort();
+}
+function renderAzBar() {
+  const el = document.getElementById("azbar");
+  el.innerHTML = "";
+  const all = document.createElement("button");
+  all.textContent = "All";
+  all.className = selectedLetter === null ? "active" : "";
+  all.addEventListener("click", () => { selectedLetter = null; renderGroups(); });
+  el.appendChild(all);
+  for (const letter of computeAvailableLetters()) {
+    const btn = document.createElement("button");
+    btn.textContent = letter;
+    btn.className = selectedLetter === letter ? "active" : "";
+    btn.addEventListener("click", () => { selectedLetter = letter; renderGroups(); });
+    el.appendChild(btn);
+  }
+}
+function renderGroups() {
+  renderAzBar();
+  const counts = new Map();
+  let total = 0;
+  for (const a of albums) {
+    if (collectionKey(a) !== currentCollection) continue;
+    total++;
+    for (const v of groupValues(a, groupField)) {
+      if (selectedLetter && letterOf(v) !== selectedLetter) continue;
+      counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+  }
+  const sorted = groupSortByCount
+    ? [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    : [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const list = document.getElementById("group-list");
+  list.innerHTML =
+    `<div class="${selectedGroup === null ? "selected" : ""}" data-group="">
+       <span>All</span><span class="group-count sortable${groupSortByCount ? " sort-active" : ""}" id="group-sort-toggle" title="Click to toggle alphabetical/count order">${total}</span>
+     </div>` +
+    sorted.map(([value, count]) => `<div class="${value === selectedGroup ? "selected" : ""}" data-group="${escapeHtml(value)}">
+      <span>${escapeHtml(value)}</span><span class="group-count">${count}</span>
+    </div>`).join("");
+  list.querySelectorAll("div").forEach(div => div.addEventListener("click", () => {
+    selectedGroup = div.dataset.group || null;
+    page = 1;
+    renderGroups();
+    render(document.getElementById("search").value);
+  }));
+  document.getElementById("group-sort-toggle").addEventListener("click", e => {
+    e.stopPropagation();
+    groupSortByCount = !groupSortByCount;
+    renderGroups();
+  });
+}
+
+function coverImg(a) {
+  return a.front_cover_url ? `<img class="cover" src="${a.front_cover_url}" alt="">` : "";
+}
+function roleList(label, names) {
+  return names && names.length ? `<dt>${label}</dt><dd>${escapeHtml(names.join(", "))}</dd>` : "";
+}
+function clickableRoleList(label, names, field) {
+  if (!names || !names.length) return "";
+  const spans = names.map(n => `<span class="tag-link" data-group-field="${field}" data-value="${escapeHtml(n)}">${escapeHtml(n)}</span>`).join(", ");
+  return `<dt>${label}</dt><dd>${spans}</dd>`;
+}
+function field(label, value) {
+  return value ? `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>` : "";
+}
+function filterByGroupValue(f, value) {
+  groupField = f;
+  document.getElementById("group-field").value = f;
+  selectedGroup = value; selectedLetter = null; page = 1;
+  renderGroups();
+  render(document.getElementById("search").value);
+}
+function showDetail(id) {
+  currentDetailId = id;
+  const a = albums.find(x => x.id === id);
+  if (!a) return;
+  const discs = (a.discs || []).map((disc, i) => {
+    const heading = disc.index ? `Disc ${escapeHtml(disc.index)}` : (a.discs.length > 1 ? `Disc ${i + 1}` : "Tracks");
+    const tracks = disc.tracks.map(t => `<li>${escapeHtml(t.title)}${t.length ? ` — ${escapeHtml(t.length)}` : ""}</li>`).join("");
+    return `<div class="disc-heading">${heading}</div><ol>${tracks}</ol>`;
+  }).join("");
+  document.getElementById("detail-content").innerHTML = `
+    ${coverImg(a)}
+    <h2>${escapeHtml(a.title)}</h2>
+    <dl>
+      ${clickableRoleList("Artist(s)", a.artists, "artists")}
+      ${roleList("Composer(s)", a.composers)}
+      ${roleList("Conductor(s)", a.conductors)}
+      ${roleList("Musician(s)", a.musicians)}
+      ${roleList("Orchestra(s)", a.orchestras)}
+      ${roleList("Chorus(es)", a.choruses)}
+      ${clickableRoleList("Genre(s)", a.genres, "genres")}
+      ${roleList("Tag(s)", a.tags)}
+      ${field("Label", a.label)}
+      ${field("Format", a.format)}
+      ${field("Country", a.country)}
+      ${field("Year", a.release_year)}
+      ${field("Rating", a.rating != null ? String(a.rating) : "")}
+      ${field("Notes", a.notes)}
+      ${field("UPC", a.upc)}
+      ${field("Date added", a.date_added)}
+    </dl>
+    ${discs}
+  `;
+  document.querySelectorAll("#detail-content .tag-link").forEach(el =>
+    el.addEventListener("click", () => filterByGroupValue(el.dataset.groupField, el.dataset.value)));
+}
+function clearDetail() {
+  currentDetailId = null;
+  document.getElementById("detail-content").innerHTML = `<p id="detail-empty">Select an album.</p>`;
+}
+
+function render(filterText) {
+  const needle = filterText.trim().toLowerCase();
+  const rows = albums.filter(a => {
+    const matchesCollection = collectionKey(a) === currentCollection;
+    const matchesSearch = !needle || a.title.toLowerCase().includes(needle) || a.artists.join(" ").toLowerCase().includes(needle);
+    const matchesGroup = selectedGroup === null || groupValues(a, groupField).includes(selectedGroup);
+    return matchesCollection && matchesSearch && matchesGroup;
+  });
+  rows.sort((a, b) => {
+    const va = Array.isArray(a[sortKey]) ? a[sortKey].join(", ") : a[sortKey];
+    const vb = Array.isArray(b[sortKey]) ? b[sortKey].join(", ") : b[sortKey];
+    const cmp = typeof va === "number" ? va - vb : String(va ?? "").localeCompare(String(vb ?? ""));
+    return sortAsc ? cmp : -cmp;
+  });
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  page = Math.min(Math.max(1, page), totalPages);
+  const start = (page - 1) * PAGE_SIZE;
+  const pageRows = rows.slice(start, start + PAGE_SIZE);
+
+  document.getElementById("count").textContent = `${rows.length} album(s)`;
+  const body = document.querySelector("#albums tbody");
+  body.innerHTML = pageRows.map(a => `<tr data-id="${a.id}">
+    <td>${escapeHtml(a.title)}</td>
+    <td>${escapeHtml(a.artists.join(", "))}</td>
+    <td>${escapeHtml(a.genres.join(", "))}</td>
+    <td>${escapeHtml(a.format)}</td>
+    <td>${escapeHtml(a.release_year)}</td>
+    <td>${a.track_count}</td>
+  </tr>`).join("");
+  body.querySelectorAll("tr").forEach(tr => tr.addEventListener("click", () => showDetail(Number(tr.dataset.id))));
+
+  const grid = document.getElementById("grid-view");
+  grid.innerHTML = pageRows.map(a => {
+    const thumb = a.front_cover_url ? `<img class="thumb" loading="lazy" src="${a.front_cover_url}" alt="">` : `<div class="thumb"></div>`;
+    return `<div class="grid-tile" data-id="${a.id}">${thumb}<div class="t">${escapeHtml(a.title)}</div><div class="a">${escapeHtml(a.artists.join(", "))}</div></div>`;
+  }).join("");
+  grid.querySelectorAll(".grid-tile").forEach(tile => tile.addEventListener("click", () => showDetail(Number(tile.dataset.id))));
+
+  document.getElementById("page-info").textContent = `Page ${page} of ${totalPages}`;
+  document.getElementById("prev-page").disabled = page <= 1;
+  document.getElementById("next-page").disabled = page >= totalPages;
+}
+
+document.getElementById("group-field").addEventListener("change", e => {
+  groupField = e.target.value; selectedGroup = null; selectedLetter = null; page = 1;
+  renderGroups(); render(document.getElementById("search").value);
+});
+document.getElementById("search").addEventListener("input", e => { page = 1; render(e.target.value); });
+
+const SORT_PRESETS = {
+  title: { key: "title", asc: true },
+  artist: { key: "artists", asc: true },
+  year_desc: { key: "release_year", asc: false },
+  label: { key: "label", asc: true },
+};
+const sortEl = document.getElementById("sort");
+function syncSortDropdown() {
+  const match = Object.entries(SORT_PRESETS).find(([, p]) => p.key === sortKey && p.asc === sortAsc);
+  if (match) sortEl.value = match[0];
+}
+sortEl.addEventListener("change", () => {
+  const preset = SORT_PRESETS[sortEl.value];
+  sortKey = preset.key; sortAsc = preset.asc; page = 1;
+  render(document.getElementById("search").value);
+});
+document.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+  const k = th.dataset.k;
+  sortAsc = sortKey === k ? !sortAsc : true;
+  sortKey = k; page = 1;
+  syncSortDropdown();
+  render(document.getElementById("search").value);
+}));
+document.getElementById("prev-page").addEventListener("click", () => { page--; render(document.getElementById("search").value); });
+document.getElementById("next-page").addEventListener("click", () => { page++; render(document.getElementById("search").value); });
+
+const viewListBtn = document.getElementById("view-list");
+const viewGridBtn = document.getElementById("view-grid");
+const listPaneEl = document.getElementById("list-pane");
+function setViewMode(mode) {
+  viewMode = mode;
+  listPaneEl.classList.toggle("view-grid", mode === "grid");
+  viewListBtn.classList.toggle("active", mode === "list");
+  viewGridBtn.classList.toggle("active", mode === "grid");
+}
+viewListBtn.addEventListener("click", () => setViewMode("list"));
+viewGridBtn.addEventListener("click", () => setViewMode("grid"));
+
+// --- Statistics ---
+function computeStats() {
+  const scoped = albums.filter(a => collectionKey(a) === currentCollection);
+  const tally = getter => {
+    const m = new Map();
+    for (const a of scoped) for (const v of getter(a)) if (v) m.set(v, (m.get(v) || 0) + 1);
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+  };
+  const decades = new Map();
+  for (const a of scoped) {
+    const y = parseInt(a.release_year, 10);
+    if (!y) continue;
+    const d = Math.floor(y / 10) * 10;
+    decades.set(d, (decades.get(d) || 0) + 1);
+  }
+  const addedYears = new Map();
+  for (const a of scoped) {
+    if (!a.date_added) continue;
+    const y = a.date_added.slice(0, 4);
+    addedYears.set(y, (addedYears.get(y) || 0) + 1);
+  }
+  const noCoverAlbums = scoped.filter(a => !a.front_cover_url).sort((a, b) => a.title.localeCompare(b.title));
+  const noArtistAlbums = scoped.filter(a => !(a.artists && a.artists.length)).sort((a, b) => a.title.localeCompare(b.title));
+  return {
+    totalAlbums: scoped.length,
+    totalTracks: scoped.reduce((s, a) => s + (a.track_count || 0), 0),
+    noCover: noCoverAlbums.length, noArtist: noArtistAlbums.length,
+    noCoverAlbums, noArtistAlbums,
+    genres: tally(a => a.genres || []),
+    formats: tally(a => a.format ? [a.format] : []),
+    countries: tally(a => a.country ? [a.country] : []),
+    labels: tally(a => a.label ? [a.label] : []),
+    decades: [...decades.entries()].sort((a, b) => a[0] - b[0]).map(([d, c]) => [`${d}s`, c]),
+    addedYears: [...addedYears.entries()].sort((a, b) => a[0].localeCompare(b[0])),
+  };
+}
+function barList(title, entries, limit) {
+  const top = limit ? entries.slice(0, limit) : entries;
+  const max = top.reduce((m, [, c]) => Math.max(m, c), 1);
+  const rows = top.map(([label, count]) => `
+    <div class="stat-row">
+      <span class="label">${escapeHtml(label)}</span>
+      <span class="bar-wrap"><span class="bar" style="width:${((count / max) * 100).toFixed(1)}%"></span></span>
+      <span class="val">${count}</span>
+    </div>`).join("");
+  return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || `<p class="stat-empty">No data.</p>`}</div>`;
+}
+function albumListHtml(albumsList) {
+  if (!albumsList.length) return `<p class="stat-empty">No data.</p>`;
+  return `<ul class="stat-detail-list">${albumsList.map(a => `<li>${escapeHtml(a.artists.join(", ") || "—")} — ${escapeHtml(a.title)}</li>`).join("")}</ul>`;
+}
+const statsExpanded = new Set();
+function statLink(key, label, n) {
+  const expanded = statsExpanded.has(key);
+  return `<span class="stat-link${expanded ? " expanded" : ""}" data-stat-key="${key}">${n} ${label}</span>`;
+}
+function renderStats() {
+  const s = computeStats();
+  const detailBlock = (key, label, n, list) => {
+    if (!statsExpanded.has(key)) return "";
+    return `<div class="stat-detail"><h4>${n} ${label}</h4>${albumListHtml(list)}</div>`;
+  };
+  document.getElementById("stats-pane").innerHTML = `
+    <div class="stats-wrap">
+      <h2>Statistics — ${escapeHtml(collectionLabel(currentCollection))}</h2>
+      <div class="stat-summary">
+        <span><strong>${s.totalAlbums}</strong> album(s)</span>
+        <span><strong>${s.totalTracks}</strong> track(s)</span>
+        ${statLink("noCover", "with no cover", s.noCover)}
+        ${statLink("noArtist", "with no artist", s.noArtist)}
+      </div>
+      ${detailBlock("noCover", "with no cover", s.noCover, s.noCoverAlbums)}
+      ${detailBlock("noArtist", "with no artist", s.noArtist, s.noArtistAlbums)}
+      <div class="stat-grid">
+        ${barList("Genres", s.genres, 15)}
+        ${barList("Formats", s.formats)}
+        ${barList("Countries", s.countries)}
+        ${barList("Labels (top 10)", s.labels, 10)}
+        ${barList("By release decade", s.decades)}
+        ${barList("By year added", s.addedYears)}
+      </div>
+    </div>`;
+  document.querySelectorAll(".stat-link").forEach(el => el.addEventListener("click", () => {
+    const key = el.dataset.statKey;
+    if (statsExpanded.has(key)) statsExpanded.delete(key); else statsExpanded.add(key);
+    renderStats();
+  }));
+}
+const statsBtn = document.getElementById("stats-btn");
+function setPanel(next) {
+  panel = next;
+  document.body.classList.toggle("panel-stats", panel === "stats");
+  statsBtn.classList.toggle("active", panel === "stats");
+  statsBtn.textContent = panel === "stats" ? "← Back to collection" : "📊 Statistics";
+  if (panel === "stats") renderStats();
+}
+statsBtn.addEventListener("click", () => setPanel(panel === "stats" ? "library" : "stats"));
+
+computeCollections();
+renderTabs();
+renderGroups();
+render("");
+clearDetail();
+"##;
+
+/// `file://` URL for a local path — percent-encodes everything outside
+/// the unreserved set, same construction as BookNojo's own `file_url`.
+/// Used for cover images in the static HTML export: it's opened
+/// straight from disk (`file://` itself), and `file://` pages can
+/// reference other local files the same way a normal page references
+/// same-origin images.
+fn file_url(path: &str) -> String {
+    const UNRESERVED: &[u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+    let mut out = String::from("file://");
+    for byte in path.bytes() {
+        if byte == b'/' || UNRESERVED.contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// Nearly the full `Album` shape, plus a resolved `front_cover_url`
+/// (a `file://` URL, or null) in place of the bare filename — the
+/// static export has no Tauri asset protocol to go through.
+#[derive(Serialize)]
+struct HtmlAlbum<'a> {
+    id: i64,
+    title: &'a str,
+    artists: &'a [String],
+    composers: &'a [String],
+    conductors: &'a [String],
+    musicians: &'a [String],
+    orchestras: &'a [String],
+    choruses: &'a [String],
+    genres: &'a [String],
+    tags: &'a [String],
+    label: &'a Option<String>,
+    format: &'a Option<String>,
+    country: &'a Option<String>,
+    release_year: &'a Option<String>,
+    rating: Option<i64>,
+    notes: &'a Option<String>,
+    upc: &'a Option<String>,
+    date_added: &'a Option<String>,
+    track_count: i64,
+    collection: &'a Option<String>,
+    front_cover_url: Option<String>,
+    discs: &'a [Disc],
+}
+
+/// A standalone HTML page reproducing most of the application's own
+/// interface (groups/A-Z bar, tabs, sort, list/grid, pagination,
+/// detail card, basic statistics) against the static data embedded in
+/// the page — same purpose as BookNojo's own `--html` export, though
+/// built independently rather than through a shared template with the
+/// Tauri app (see `BUILD.md` for why). English only (no EN/FR
+/// toggle), and read-only: no add/edit/delete form, since `mc_add`
+/// already covers that directly.
+pub fn write_html(path: &Path, albums: &[Album], images_dir: &Path) -> Result<()> {
+    // A `file://` URL needs an absolute path — the caller may well have
+    // passed a relative one (e.g. `--db sample-collection/...`), which
+    // would silently produce a broken (not just wrong-looking) image:
+    // `file://sample-collection/...` parses as host "sample-collection"
+    // with an empty path, not a relative path. Found via a screenshot
+    // the user took of the very first generated export, same genre of
+    // bug as the Tauri app's own unresolved-".." cover bug (v0.25.0).
+    let images_dir_abs = images_dir.canonicalize().unwrap_or_else(|_| images_dir.to_path_buf());
+    let images_dir_str = images_dir_abs.to_string_lossy();
+    let html_albums: Vec<HtmlAlbum> = albums
         .iter()
-        .map(|a| Row {
+        .map(|a| HtmlAlbum {
+            id: a.id,
             title: &a.title,
-            artists: a.artists.join(", "),
-            genres: a.genres.join(", "),
-            format: a.format.as_deref().unwrap_or(""),
-            country: a.country.as_deref().unwrap_or(""),
-            release_year: a.release_year.as_deref().unwrap_or(""),
+            artists: &a.artists,
+            composers: &a.composers,
+            conductors: &a.conductors,
+            musicians: &a.musicians,
+            orchestras: &a.orchestras,
+            choruses: &a.choruses,
+            genres: &a.genres,
+            tags: &a.tags,
+            label: &a.label,
+            format: &a.format,
+            country: &a.country,
+            release_year: &a.release_year,
+            rating: a.rating,
+            notes: &a.notes,
+            upc: &a.upc,
+            date_added: &a.date_added,
             track_count: a.track_count,
+            collection: &a.collection,
+            front_cover_url: a
+                .front_cover
+                .as_deref()
+                .map(|f| file_url(&format!("{images_dir_str}/{f}"))),
+            discs: &a.discs,
         })
         .collect();
     // Escaped so a title/artist containing "</script>" can't break out of
     // the embedding <script> tag.
-    let data_json = serde_json::to_string(&rows)?.replace("</", "<\\/");
+    let data_json = serde_json::to_string(&html_albums)?.replace("</", "<\\/");
 
     let html = format!(
         r##"<!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>MusicNojo — Collection</title>
 <style>
-  body {{ font-family: -apple-system, system-ui, sans-serif; margin: 2rem; color: #222; }}
-  h1 {{ font-size: 1.3rem; }}
-  input {{ font-size: 1rem; padding: 0.4rem; width: 100%; max-width: 24rem; margin-bottom: 1rem; }}
-  table {{ border-collapse: collapse; width: 100%; }}
-  th, td {{ text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #ddd; }}
-  th {{ cursor: pointer; user-select: none; position: sticky; top: 0; background: #fafafa; }}
-  #count {{ color: #666; font-size: 0.9rem; margin-bottom: 0.5rem; }}
+{CSS}
 </style>
 </head>
 <body>
-<h1>MusicNojo — Collection ({count} albums)</h1>
-<input id="search" type="search" placeholder="Rechercher par titre ou artiste…" autofocus>
-<div id="count"></div>
-<table id="t">
-<thead><tr>
-  <th data-k="title">Titre</th>
-  <th data-k="artists">Artiste(s)</th>
-  <th data-k="genres">Genre(s)</th>
-  <th data-k="format">Format</th>
-  <th data-k="country">Pays</th>
-  <th data-k="release_year">Année</th>
-  <th data-k="track_count">Pistes</th>
-</tr></thead>
-<tbody></tbody>
-</table>
+<header>
+  <h1>MusicNojo</h1>
+  <input id="search" type="search" placeholder="Search by title or artist…" autofocus>
+  <span id="count"></span>
+  <button id="stats-btn">📊 Statistics</button>
+</header>
+<div id="tabs"></div>
+<main id="main">
+  <aside id="groups">
+    <select id="group-field">
+      <option value="artists">Artist</option>
+      <option value="genres">Genre</option>
+      <option value="format">Format</option>
+      <option value="country">Country</option>
+      <option value="label">Label</option>
+    </select>
+    <div id="azbar"></div>
+    <div id="group-list"></div>
+  </aside>
+  <div id="right-col">
+    <div id="list-pane">
+      <div id="list-toolbar">
+        <select id="sort">
+          <option value="title">Title (A→Z)</option>
+          <option value="artist">Artist (A→Z)</option>
+          <option value="year_desc">Year (newest first)</option>
+          <option value="label">Label (A→Z)</option>
+        </select>
+        <div id="view-toggle">
+          <button id="view-list" class="active">☰ List</button>
+          <button id="view-grid">▦ Grid</button>
+        </div>
+      </div>
+      <table id="albums">
+        <thead><tr>
+          <th data-k="title">Title</th>
+          <th data-k="artists">Artist(s)</th>
+          <th data-k="genres">Genre(s)</th>
+          <th data-k="format">Format</th>
+          <th data-k="release_year">Year</th>
+          <th data-k="track_count">Tracks</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="grid-view"></div>
+      <div id="pager">
+        <button id="prev-page">‹ Prev.</button>
+        <span id="page-info"></span>
+        <button id="next-page">Next ›</button>
+      </div>
+    </div>
+    <aside id="detail">
+      <div id="detail-content"><p id="detail-empty">Select an album.</p></div>
+    </aside>
+  </div>
+</main>
+<div id="stats-pane"></div>
+<script id="data" type="application/json">{data_json}</script>
 <script>
-const ALBUMS = {data_json};
-let sortKey = "title", sortAsc = true;
-
-function render(filterText) {{
-  const needle = filterText.trim().toLowerCase();
-  let rows = ALBUMS.filter(a =>
-    !needle || a.title.toLowerCase().includes(needle) || a.artists.toLowerCase().includes(needle)
-  );
-  rows.sort((a, b) => {{
-    const va = a[sortKey], vb = b[sortKey];
-    const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
-    return sortAsc ? cmp : -cmp;
-  }});
-  document.getElementById("count").textContent = rows.length + " résultat(s)";
-  const body = document.querySelector("#t tbody");
-  body.innerHTML = rows.map(a => `<tr>
-    <td>${{a.title}}</td><td>${{a.artists}}</td><td>${{a.genres}}</td>
-    <td>${{a.format}}</td><td>${{a.country}}</td><td>${{a.release_year}}</td><td>${{a.track_count}}</td>
-  </tr>`).join("");
-}}
-
-document.getElementById("search").addEventListener("input", e => render(e.target.value));
-document.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {{
-  const k = th.dataset.k;
-  sortAsc = (sortKey === k) ? !sortAsc : true;
-  sortKey = k;
-  render(document.getElementById("search").value);
-}}));
-render("");
+{JS}
 </script>
 </body>
 </html>
 "##,
-        count = albums.len(),
+        CSS = STATIC_EXPORT_CSS,
+        JS = STATIC_EXPORT_JS,
+        data_json = data_json,
     );
     std::fs::write(path, html).with_context(|| format!("écriture de {}", path.display()))?;
     Ok(())

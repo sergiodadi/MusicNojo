@@ -2,7 +2,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use music_collector_export::{load_albums, open_readonly, write_csv, write_html, Connection, ENT_ALBUM};
+use music_collector_export::{
+    images_dir, load_albums, open_readonly, write_csv, write_html, Connection, ENT_ALBUM,
+};
 
 #[derive(Parser)]
 struct Args {
@@ -88,7 +90,7 @@ fn main() -> Result<()> {
         println!("JSON écrit dans: {}", json_path.display());
     }
     if let Some(html_path) = &args.html {
-        write_html(html_path, &albums)?;
+        write_html(html_path, &albums, &images_dir(&args.db))?;
         println!("HTML écrit dans: {}", html_path.display());
     }
 
