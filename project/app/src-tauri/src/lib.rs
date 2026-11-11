@@ -8,7 +8,37 @@ use music_collector_export::{
 };
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
+
+/// Only collections produced by this exact Music Collector release are
+/// known to match the schema this project's SQL targets — same rule
+/// and same reasoning as BookNojo's own SUPPORTED_BKCP_VERSION.
+const SUPPORTED_MUCP_VERSION: &str = "20.3.2";
+
+/// Reads the Music Collector version that created a `.mucp` package,
+/// from its own `preferences.plist` (key `kPreferencesApplicationVersion`).
+/// Uses `plutil -extract ... raw` (a single key) rather than
+/// `-convert json` (the whole document) — tried the latter first,
+/// matching BookNojo's own `bkcp_version()`, but the real collection's
+/// plist has some other key plutil can't represent in JSON at all
+/// ("Invalid object in plist for JSON format"), which would have
+/// broken the check on every real file; extracting just the one key
+/// needed sidesteps that entirely. `None` covers both a missing
+/// preferences.plist (e.g. the bundled sample-collection, which never
+/// goes through this check — see `pick_collection`) and any read/parse
+/// failure.
+fn mucp_version(mucp_dir: &Path) -> Option<String> {
+    let output = std::process::Command::new("plutil")
+        .args(["-extract", "kPreferencesApplicationVersion", "raw", "-o", "-"])
+        .arg(mucp_dir.join("preferences.plist"))
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let version = String::from_utf8(output.stdout).ok()?;
+    Some(version.trim().to_string())
+}
 
 /// Path to the bundled fictional sample-collection, used when the user
 /// hasn't opened a real collection yet.
@@ -119,9 +149,44 @@ fn pick_collection(app: tauri::AppHandle) {
         .set_title("Open a Music Collector collection (.mucp)")
         .add_filter("Collection", &["mucp"])
         .pick_file(move |file| {
-            if let Some(file) = file {
+            let Some(file) = file else { return };
+            let Some(local_path) = file.as_path() else {
                 let _ = app.emit("collection-picked", file.to_string());
+                return;
+            };
+
+            // Only a path picked here goes through this — the bundled
+            // sample-collection (no preferences.plist at all) is loaded
+            // through a different path at boot and never hits this
+            // check, same split BookNojo's own import dialog has.
+            match mucp_version(local_path) {
+                Some(version) if version == SUPPORTED_MUCP_VERSION => {}
+                Some(version) => {
+                    app.dialog()
+                        .message(format!(
+                            "Cette collection a été créée avec Music Collector {version}. \
+                             Seule la version {SUPPORTED_MUCP_VERSION} est prise en charge — \
+                             ouverture annulée."
+                        ))
+                        .title("Version non prise en charge")
+                        .kind(MessageDialogKind::Error)
+                        .show(|_| {});
+                    return;
+                }
+                None => {
+                    app.dialog()
+                        .message(
+                            "Impossible de déterminer la version de Music Collector utilisée \
+                             pour cette collection — ouverture annulée par précaution.",
+                        )
+                        .title("Version non vérifiable")
+                        .kind(MessageDialogKind::Error)
+                        .show(|_| {});
+                    return;
+                }
             }
+
+            let _ = app.emit("collection-picked", file.to_string());
         });
 }
 
@@ -236,6 +301,15 @@ fn delete_album(path: String, id: i64) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The bundled sample-collection has no preferences.plist at all
+    /// (it was never written by the real Music Collector app) — this
+    /// is exactly why the version check lives in `pick_collection`
+    /// only, never on the path the sample-collection loads through.
+    #[test]
+    fn mucp_version_is_none_without_a_preferences_plist() {
+        assert_eq!(mucp_version(&sample_collection_path()), None);
+    }
 
     fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
         std::fs::create_dir_all(dst)?;

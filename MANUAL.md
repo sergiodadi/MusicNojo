@@ -11,6 +11,9 @@ compile it from source, see [`BUILD.md`](BUILD.md).
 - **"Open Collection…"** (in the header, or File → Open Collection…
   in the menu bar) opens the native macOS file picker to choose a
   `.mucp` collection. The picker only accepts `.mucp` files.
+- A `.mucp` collection from a Music Collector version other than the
+  one MusicNojo was built against (20.3.2) is rejected at this point,
+  with a clear message rather than a crash or silent corruption.
 - On the very first launch, before opening anything, MusicNojo shows
   an entirely fictional bundled sample collection (12 invented albums,
   no personal data) — so there's always something to see, without ever

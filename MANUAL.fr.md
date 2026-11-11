@@ -13,6 +13,10 @@ voir [`BUILD.fr.md`](BUILD.fr.md).
   une collection… dans la barre de menus) ouvre le sélecteur de
   fichier natif macOS pour choisir une collection `.mucp`. Le
   sélecteur n'accepte que les fichiers `.mucp`.
+- Une collection `.mucp` créée avec une version de Music Collector
+  différente de celle visée par MusicNojo (20.3.2) est refusée à ce
+  moment-là, avec un message clair plutôt qu'un plantage ou une
+  corruption silencieuse.
 - Au tout premier lancement, avant d'avoir rien ouvert, MusicNojo
   affiche une collection d'exemple intégrée, entièrement fictive (12
   albums inventés, aucune donnée personnelle) — il y a donc toujours
