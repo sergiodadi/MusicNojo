@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use music_collector_export::{load_albums, open_readonly, write_csv, write_html};
+use music_collector_export::{load_albums, open_readonly, write_csv, write_html, Connection, ENT_ALBUM};
 
 #[derive(Parser)]
 struct Args {
@@ -21,13 +21,54 @@ struct Args {
     /// Write a standalone, searchable HTML page to this file
     #[arg(long)]
     html: Option<PathBuf>,
+
+    /// Only keep the named sub-collection (ZCOLLECTION table, e.g.
+    /// "music-collector-serge"). A .mucp file can hold several
+    /// sub-collections; without this option, ALL of them are exported.
+    #[arg(long)]
+    collection: Option<String>,
+
+    /// Lists the available sub-collections (name, album count, copy
+    /// count) and stops — writes no CSV/JSON/HTML.
+    #[arg(long)]
+    list_collections: bool,
+}
+
+/// Prints every sub-collection with its album count and the sum of
+/// their quantities (the number the app's own counter would display)
+/// — same shape as BookNojo's own `print_collections`.
+fn print_collections(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT col.ZTITLE, COUNT(c.Z_PK), SUM(COALESCE(c.ZQUANTITY, 1))
+         FROM ZCOLLECTION col
+         LEFT JOIN ZCOLLECTIBLE c ON c.ZCOLLECTION = col.Z_PK AND c.Z_ENT = ?1
+         GROUP BY col.Z_PK
+         ORDER BY col.ZTITLE",
+    )?;
+    let mut rows = stmt.query([ENT_ALBUM])?;
+    println!("{:<30} {:>10} {:>12}", "collection", "albums", "exemplaires");
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(0)?;
+        let albums: i64 = row.get(1)?;
+        let qty: i64 = row.get(2)?;
+        println!("{:<30} {:>10} {:>12}", name, albums, qty);
+    }
+    Ok(())
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
 
     let conn = open_readonly(&args.db)?;
-    let albums = load_albums(&conn)?;
+
+    if args.list_collections {
+        return print_collections(&conn);
+    }
+
+    let mut albums = load_albums(&conn)?;
+    if let Some(name) = &args.collection {
+        albums.retain(|a| a.collection.as_deref() == Some(name.as_str()));
+    }
     println!("{} albums trouvés.", albums.len());
     let total_tracks: i64 = albums
         .iter()

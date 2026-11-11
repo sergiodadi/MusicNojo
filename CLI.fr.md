@@ -46,6 +46,23 @@ nombre de pistes). Le **JSON** est la forme imbriquée complète
 (albums → disques → pistes), les mêmes données que l'application
 elle-même charge.
 
+### Sous-collections
+
+Un fichier `.mucp` peut contenir **plusieurs sous-collections**.
+
+```bash
+# Lister les sous-collections et leurs compteurs
+./mc_export --db "<chemin>" --list-collections
+
+# N'exporter qu'une seule sous-collection
+./mc_export --db "<chemin>" --collection "<nom>" \
+  --csv albums.csv --json albums.json
+```
+
+Le compteur affiché par l'application est la **somme des quantités**
+de la sous-collection active, pas le nombre de fiches — les deux
+valeurs peuvent légitimement différer.
+
 ## 3. L'export HTML
 
 ```bash

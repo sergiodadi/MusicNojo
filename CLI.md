@@ -42,6 +42,23 @@ role and many-to-many field joined with `; `, every scalar field,
 track count). The **JSON** is the full nested shape (albums → discs →
 tracks), the same data the application itself loads.
 
+### Sub-collections
+
+A `.mucp` file can contain **several sub-collections**.
+
+```bash
+# List the sub-collections and their counters
+./mc_export --db "<path>" --list-collections
+
+# Export only one sub-collection
+./mc_export --db "<path>" --collection "<name>" \
+  --csv albums.csv --json albums.json
+```
+
+The counter shown by the application is the **sum of quantities** for
+the active sub-collection, not the number of records — the two values
+can legitimately differ.
+
 ## 3. The HTML export
 
 ```bash
