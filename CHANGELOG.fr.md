@@ -5,6 +5,14 @@
 Historique des **versions publiées sur GitHub**, une entrée par
 tag/release — même convention que le [CHANGELOG.md de BookNojo](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b4] - 2026-11-11
+
+Nouveau `.dmg` (`MusicNojo_0.53.0_aarch64.dmg`). Corrige la version
+affichée dans le badge d'en-tête et les deux panneaux « About
+MusicNojo » (le dialogue personnalisé et le panneau natif macOS) — ils
+affichaient la version de développement de Cargo.toml (ex. `0.51.0`)
+au lieu de la véritable release publiée (`v1.0.0b3`).
+
 ## [v1.0.0b3] - 2026-11-11
 
 Nouveau `.dmg` (`MusicNojo_0.51.0_aarch64.dmg`, non signé — même
