@@ -193,6 +193,45 @@ Before writing, `commit` and `set-cover` both check, in order:
 3. the SQL runs in a single transaction (`commit`) or the file copy
    plus column updates happen (`set-cover`).
 
+### Why an independent database, separate from Music Collector
+
+Music Collector for Mac is an Intel app that depends on Rosetta 2 to
+run on Apple Silicon. Apple has announced the planned end of Rosetta
+2: full support only through macOS 27 "Golden Gate" (fall 2026),
+largely removed starting with macOS 28 (fall 2027). Music Collector
+therefore has a limited remaining lifespan on an up-to-date Mac,
+unless its publisher ships a native Apple Silicon update.
+
+The long-term goal is a database **independent** from the
+application — bootstrapped once from the real collection (§ "`mc_add
+import`"), then fed only by MusicNojo, never depending on Music
+Collector to keep growing. The chosen extension for this persistent
+database is **`.mnc`** — it works exactly like a `.mucp` (only the
+presence of a `Music_data` file inside matters, never the folder's
+name). To keep feeding the real Music Collector application too
+during a transition period, run the same `add-plan`/`edit-plan`/
+`delete-plan` + `commit` sequence a second time with `--db` pointing
+at a copy of the real collection instead — each database is resolved
+and planned **separately** this way (never the same `plan.sql` reused
+against both), since primary keys and already-known lookup values
+diverge as soon as two databases evolve independently.
+
+### `mc_add import` — the Music Collector to MusicNojo transfer
+
+Bootstraps a new independent `.mnc` database from an existing
+collection (database + `Images/` folder). Only meant to be run
+**once**: refuses to overwrite a destination that already exists.
+
+```bash
+./mc_add import --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp"
+# -> collection/MyCollection.mnc (default destination)
+
+# Or with an explicit destination:
+./mc_add import \
+  --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp" \
+  --dest ~/MyCollectionMusicNojo.mnc
+```
+
 ## 5. Troubleshooting
 
 - **`--db "~/Documents/..."` fails**: if the path is quoted, the shell

@@ -203,6 +203,47 @@ l'ordre :
 3. le SQL s'exécute en une seule transaction (`commit`), ou la copie
    de fichier plus les mises à jour de colonnes ont lieu (`set-cover`).
 
+### Pourquoi une base indépendante, séparée de Music Collector
+
+Music Collector pour Mac est une application Intel qui dépend de
+Rosetta 2 pour tourner sur Apple Silicon. Apple a annoncé la fin
+programmée de Rosetta 2 : support complet jusqu'à macOS 27 "Golden
+Gate" (automne 2026), largement retiré à partir de macOS 28 (automne
+2027). Music Collector a donc une espérance de vie limitée sur un Mac
+à jour, sauf si son éditeur sort une mise à jour native Apple Silicon.
+
+L'objectif à long terme est une base **indépendante** de
+l'application — amorcée une fois depuis la vraie collection (§
+"`mc_add import`"), puis alimentée uniquement par MusicNojo, sans plus
+dépendre de Music Collector pour grandir. L'extension choisie pour
+cette base persistante est **`.mnc`** — elle fonctionne exactement
+comme un `.mucp` (seule la présence d'un fichier `Music_data` dedans
+compte, jamais le nom du dossier). Pour continuer à alimenter aussi la
+vraie application Music Collector pendant une période de transition,
+relancer la même séquence `add-plan`/`edit-plan`/`delete-plan` +
+`commit` une seconde fois avec `--db` pointant vers une copie de la
+vraie collection — chaque base est ainsi résolue et planifiée
+**séparément** (jamais le même `plan.sql` réutilisé sur les deux),
+puisque les clés primaires et les valeurs de référence déjà connues
+divergent dès que les deux bases évoluent indépendamment.
+
+### `mc_add import` — le transfert de Music Collector vers MusicNojo
+
+Amorce une nouvelle base indépendante `.mnc` à partir d'une collection
+existante (base + dossier `Images/`). Conçu pour n'être exécuté
+**qu'une seule fois** : refuse d'écraser une destination qui existe
+déjà.
+
+```bash
+./mc_add import --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp"
+# -> collection/MyCollection.mnc (destination par défaut)
+
+# Ou avec une destination explicite :
+./mc_add import \
+  --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp" \
+  --dest ~/MyCollectionMusicNojo.mnc
+```
+
 ## 5. Dépannage
 
 - **`--db "~/Documents/..."` échoue** : si le chemin est entre

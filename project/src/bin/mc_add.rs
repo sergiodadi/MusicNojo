@@ -1,13 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
     open_readonly, resolve_db_path, set_cover, AlbumFields, ManyToManyInputs,
-    ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
+    ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags, ENT_ALBUM,
 };
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 
 #[derive(Parser)]
 struct Args {
@@ -95,6 +95,21 @@ enum Command {
         #[arg(long)]
         back: Option<PathBuf>,
     },
+    /// Bootstraps a new, independent ".mnc" database from an existing
+    /// collection (database + Images/ folder) — a one-time copy, never
+    /// re-run against a destination that already exists. The result
+    /// works exactly like a .mucp (same schema, just a different
+    /// extension to mark it as MusicNojo's own going forward, not
+    /// Music Collector's) — see CLI.md § "Why an independent database".
+    Import {
+        /// The existing .mucp (or any other extension — only the
+        /// presence of Music_data inside matters) to copy from.
+        #[arg(long)]
+        source: PathBuf,
+        /// Defaults to "collection/<source name>.mnc" in the current directory.
+        #[arg(long)]
+        dest: Option<PathBuf>,
+    },
 }
 
 fn open_readonly_with_path(db: &Path) -> Result<(PathBuf, Connection)> {
@@ -117,6 +132,69 @@ fn emit_plan(plan_sql: &str, out: Option<PathBuf>, db_path: &Path) -> Result<()>
         "(Aucune écriture dans {} — ce SQL n'a pas été exécuté.)",
         db_path.display()
     );
+    Ok(())
+}
+
+/// Default destination when `--dest` is omitted: `collection/<source
+/// basename>.mnc` in the current directory — `.mnc` is the chosen
+/// extension for the new, independent "MusicNojo" database going
+/// forward, same convention as BookNojo's own `.col`.
+fn default_import_dest(source: &Path) -> PathBuf {
+    let name = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "MyCollection".to_string());
+    PathBuf::from("collection").join(format!("{name}.mnc"))
+}
+
+fn cmd_import(source: PathBuf, dest: Option<PathBuf>) -> Result<()> {
+    let source_db = resolve_db_path(&source);
+    let source_pkg = source_db
+        .parent()
+        .context("dossier source introuvable (attendu : un .mucp contenant Music_data)")?;
+
+    let dest = dest.unwrap_or_else(|| default_import_dest(&source));
+    if dest.exists() {
+        bail!(
+            "{} existe déjà — l'import ne sert qu'à amorcer une nouvelle base, une seule \
+             fois, pour ne jamais en écraser une existante. Choisissez un autre chemin \
+             avec --dest, ou supprimez-le d'abord si vous êtes sûr.",
+            dest.display()
+        );
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("création de {}", parent.display()))?;
+    }
+
+    println!("Import de {} vers {}...", source_pkg.display(), dest.display());
+    let status = std::process::Command::new("cp")
+        .args(["-R", &source_pkg.to_string_lossy(), &dest.to_string_lossy()])
+        .status()
+        .context("exécution de cp -R")?;
+    if !status.success() {
+        bail!("échec de la copie (cp -R)");
+    }
+    std::process::Command::new("chmod")
+        .args(["-R", "u+w", &dest.to_string_lossy()])
+        .status()
+        .context("exécution de chmod -R u+w")?;
+
+    let dest_music_data = dest.join("Music_data");
+    let conn = Connection::open_with_flags(&dest_music_data, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture de {}", dest_music_data.display()))?;
+    let album_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_ENT = ?1",
+        [ENT_ALBUM],
+        |row| row.get(0),
+    )?;
+
+    println!();
+    println!("✅ Import terminé : {album_count} album(s) dans {}.", dest.display());
+    println!("   Cette base est désormais indépendante : plus aucune synchronisation");
+    println!("   automatique avec la source. mc_add/l'application peuvent continuer à");
+    println!("   écrire dedans normalement — c'est un .mucp comme un autre, seule");
+    println!("   l'extension a changé.");
+
     Ok(())
 }
 
@@ -188,6 +266,9 @@ fn main() -> Result<()> {
         } => {
             set_cover(&db, id, front.as_deref(), back.as_deref())?;
         }
+        Command::Import { source, dest } => {
+            cmd_import(source, dest)?;
+        }
     }
     Ok(())
 }
@@ -195,6 +276,20 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_import_dest_uses_the_mnc_extension_under_collection() {
+        assert_eq!(
+            default_import_dest(Path::new(
+                "/Users/x/Documents/Collectorz/Music Collector/MyCollection.mucp"
+            )),
+            PathBuf::from("collection/MyCollection.mnc")
+        );
+        assert_eq!(
+            default_import_dest(Path::new("Already.mnc")),
+            PathBuf::from("collection/Already.mnc")
+        );
+    }
 
     fn make_writable(path: &Path) -> Result<()> {
         use std::os::unix::fs::PermissionsExt;
