@@ -605,7 +605,7 @@ function roleList(label, names) {
 // exact value, same as BookNojo's own genre pills (there, genre only;
 // here also artist, since it's the single most useful jump target for
 // a music collection).
-function clickableRoleList(label, names, groupFieldKey) {
+function clickableRoleList(label, names, groupFieldKey, bold) {
   if (!names || !names.length) return "";
   const spans = names
     .map(
@@ -613,7 +613,8 @@ function clickableRoleList(label, names, groupFieldKey) {
         `<span class="tag-link" data-group-field="${groupFieldKey}" data-value="${escapeHtml(n)}">${escapeHtml(n)}</span>`
     )
     .join(", ");
-  return `<dt>${label}</dt><dd>${spans}</dd>`;
+  const cls = bold ? ' class="field-bold"' : "";
+  return `<dt${cls}>${label}</dt><dd${cls}>${spans}</dd>`;
 }
 
 function filterByGroupValue(field, value) {
@@ -627,12 +628,10 @@ function filterByGroupValue(field, value) {
   saveState();
 }
 
-function field(label, value) {
-  return value ? `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>` : "";
-}
-
-function albumTrackCount(a) {
-  return a.discs.reduce((n, disc) => n + disc.tracks.length, 0);
+function field(label, value, bold) {
+  if (!value) return "";
+  const cls = bold ? ' class="field-bold"' : "";
+  return `<dt${cls}>${label}</dt><dd${cls}>${escapeHtml(value)}</dd>`;
 }
 
 function albumDurationSeconds(a) {
@@ -676,6 +675,8 @@ function showDetail(id) {
     })
     .join("");
 
+  const tracksBanner = a.discs.length ? `<div class="tracks-banner">${escapeHtml(a.title)}</div>` : "";
+
   const front = coverSrc(a.front_cover);
   const cover = front ? `<img class="cover" src="${front}" alt="">` : "";
 
@@ -690,7 +691,7 @@ function showDetail(id) {
       : "";
 
   const duration = formatDuration(albumDurationSeconds(a));
-  const trackCount = albumTrackCount(a);
+  const trackCount = a.track_count;
 
   document.getElementById("detail-content").innerHTML = `
     <div class="detail-title-block">
@@ -700,10 +701,10 @@ function showDetail(id) {
     <div class="detail-top">
       ${cover}
       <dl class="detail-meta">
-        ${field(t("detail_field_upc"), a.upc)}
-        ${field(t("detail_field_track_count"), trackCount ? String(trackCount) : "")}
+        ${field(t("detail_field_upc"), a.upc, true)}
+        ${field(t("detail_field_track_count"), trackCount ? String(trackCount) : "", true)}
         ${field(t("detail_field_duration"), duration)}
-        ${field(t("detail_field_format"), a.format)}
+        ${field(t("detail_field_format"), a.format, true)}
       </dl>
     </div>
     <dl>
@@ -712,15 +713,16 @@ function showDetail(id) {
       ${roleList(t("detail_field_musicians"), a.musicians)}
       ${roleList(t("detail_field_orchestras"), a.orchestras)}
       ${roleList(t("detail_field_choruses"), a.choruses)}
-      ${clickableRoleList(t("detail_field_genres"), a.genres, "genres")}
+      ${clickableRoleList(t("detail_field_genres"), a.genres, "genres", true)}
       ${roleList(t("detail_field_tags"), a.tags)}
-      ${field(t("detail_field_label"), a.label)}
+      ${field(t("detail_field_label"), a.label, true)}
       ${field(t("detail_field_country"), a.country)}
-      ${field(t("detail_field_year"), a.release_year)}
+      ${field(t("detail_field_year"), a.release_year, true)}
       ${field(t("detail_field_rating"), a.rating != null ? String(a.rating) : "")}
       ${field(t("detail_field_notes"), a.notes)}
       ${field(t("detail_field_date_added"), a.date_added)}
     </dl>
+    ${tracksBanner}
     ${discs}
   `;
   document.querySelectorAll("#detail-content .tag-link").forEach((el) =>

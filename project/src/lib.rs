@@ -404,7 +404,6 @@ struct AlbumRow {
     back_cover: Option<String>,
     thumbnail: Option<String>,
     backdrop: Option<String>,
-    track_count: i64,
 }
 
 pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
@@ -414,7 +413,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
         "SELECT Z_PK, ZTITLE, ZFORMAT, ZCOUNTRY, ZLABEL, ZCONDITION, ZPACKAGING, \
                 ZVINYLCOLOR, ZSPARS, ZOWNER, ZLOCATION, ZCOLLECTION, ZRELEASEYEAR, \
                 ZMYRATING, ZNOTES, ZUPC, ZFRONTCOVER, ZBACKCOVER, ZTHUMBFILEPATH, \
-                ZBACKDROP, ZNRTRACKS, \
+                ZBACKDROP, \
                 datetime(ZDATEADDED + 978307200, 'unixepoch') \
          FROM ZCOLLECTIBLE WHERE Z_ENT = ?1 ORDER BY Z_PK",
     )?;
@@ -441,8 +440,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
                 back_cover: row.get(17)?,
                 thumbnail: row.get(18)?,
                 backdrop: row.get(19)?,
-                track_count: row.get(20)?,
-                date_added: row.get(21)?,
+                date_added: row.get(20)?,
             })
         })?
         .filter_map(|r| r.ok())
@@ -472,8 +470,15 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             back_cover,
             thumbnail,
             backdrop,
-            track_count,
         } = row;
+
+        let discs = lookups.discs(id);
+        // The raw ZNRTRACKS column (ignored above) can be 0 even when the
+        // album's own tracks are present and correctly linked — observed in
+        // a real collection. The actual disc/track rows are the source of
+        // truth, so they're counted directly rather than trusting the
+        // stored column.
+        let track_count = discs.iter().map(|d| d.tracks.len() as i64).sum::<i64>();
 
         albums.push(Album {
             id,
@@ -509,7 +514,7 @@ pub fn load_albums(conn: &Connection) -> Result<Vec<Album>> {
             thumbnail,
             backdrop,
             track_count,
-            discs: lookups.discs(id),
+            discs,
         });
     }
     Ok(albums)
