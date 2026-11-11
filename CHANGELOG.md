@@ -16,17 +16,15 @@ published release (`v1.0.0b3`).
 ## [v1.0.0b3] - 2026-11-11
 
 New `.dmg` (`MusicNojo_0.51.0_aarch64.dmg`, unsigned — same Gatekeeper
-workaround as before). Layout and data fixes, all from direct
-comparison with Music Collector and BookNojo:
+workaround as before). Layout and data fixes:
 
 - Header no longer wraps to a second row at a narrow window width; the
   A-Z letter bar now spans the full width between the tabs and the
-  three-pane layout, matching Music Collector's own placement.
+  three-pane layout.
 - The album detail card was restructured: artist and title above the
   cover, UPC/track count/duration/format to its right, track listing
   below — then restyled with a dark background, a blue title, bold
-  key fields, and a blue banner above the track list, matching Music
-  Collector's own look.
+  key fields, and a blue banner above the track list.
 - Fixed a real bug: the track count shown everywhere (app, CSV/JSON
   export, static HTML export) came from a stored field that can be 0
   even when an album's tracks are all present — it's now counted from

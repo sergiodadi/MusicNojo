@@ -240,9 +240,8 @@ header h1 {
   padding: 0.3rem;
 }
 
-/* Full-width, between the tabs and the three-pane layout — same
-   placement as Music Collector's own A-Z bar, not confined to the
-   groups sidebar's own width. */
+/* Full-width, between the tabs and the three-pane layout — not
+   confined to the groups sidebar's own width. */
 #azbar {
   display: flex;
   flex-wrap: nowrap;
