@@ -9,10 +9,9 @@ body {
 
 header {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.6rem;
-  row-gap: 0.5rem;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #ddd;
   background: #fff;
@@ -26,11 +25,28 @@ header h1 {
 }
 
 #search {
-  flex: 1 1 12rem;
-  min-width: 8rem;
+  flex: 1 1 4rem;
+  min-width: 3rem;
   max-width: 24rem;
   font-size: 1rem;
   padding: 0.4rem 0.6rem;
+}
+
+/* Open Collection…/Add Album…/Statistics must always stay on the
+   header's single line (never wrap to a second row) — the file
+   badge, version badge and language toggle give way first, in
+   increasing order of narrowness, since they're the least essential
+   at a narrow window width. */
+@media (max-width: 900px) {
+  #app-version {
+    display: none;
+  }
+}
+@media (max-width: 740px) {
+  #file-badge,
+  #lang-toggle {
+    display: none;
+  }
 }
 
 
@@ -224,25 +240,32 @@ header h1 {
   padding: 0.3rem;
 }
 
+/* Full-width, between the tabs and the three-pane layout — same
+   placement as Music Collector's own A-Z bar, not confined to the
+   groups sidebar's own width. */
 #azbar {
   display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  padding: 0.3rem 0.5rem;
-  border-bottom: 1px solid #eee;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  overflow-x: auto;
+  gap: 0.2rem;
+  padding: 0.4rem 1rem;
+  background: #fafafa;
+  border-bottom: 1px solid #ddd;
   flex-shrink: 0;
 }
 
 #azbar button {
   border: 1px solid transparent;
   background: none;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 600;
   color: #888;
-  padding: 0.1rem 0.25rem;
+  padding: 0.25rem 0.55rem;
   border-radius: 4px;
   cursor: pointer;
-  min-width: 1.1rem;
+  min-width: 1.6rem;
+  flex-shrink: 0;
 }
 
 #azbar button:hover {
