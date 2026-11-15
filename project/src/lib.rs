@@ -1604,6 +1604,28 @@ pub fn ensure_not_real_collection(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Vérifie si Music Collector lui-même est actuellement lancé, via
+/// `pgrep -x`. Écrire dans `Music_data` pendant que l'application le
+/// garde ouvert risque un WAL incohérent, ou que l'application écrase
+/// nos changements à sa prochaine sauvegarde — ceci doit renvoyer
+/// `false` avant toute écriture réelle. Même vérification et même
+/// raisonnement que `is_book_collector_running` de BookNojo
+/// (`pgrep -x "Music Collector"` correspond au `CFBundleExecutable`
+/// exact du bundle de l'application, confirmé directement depuis
+/// l'Info.plist de l'application installée).
+pub fn is_music_collector_running() -> Result<bool> {
+    let output = std::process::Command::new("pgrep")
+        .args(["-x", "Music Collector"])
+        .output()
+        .context("exécution de pgrep pour vérifier si Music Collector est lancé")?;
+    // pgrep sort avec le code 0 s'il a trouvé au moins un processus
+    // correspondant, 1 s'il n'en a trouvé aucun — les deux sont des
+    // vérifications réussies, pas des échecs de pgrep lui-même, donc
+    // seul son code de sortie (pas une erreur de lancement) distingue
+    // les deux cas.
+    Ok(output.status.success())
+}
+
 /// Copies the Music_data file to a timestamped backup next to it, before
 /// any write — cheap (a few MB at most, no images involved) and undoes
 /// the one real risk (a bad add/edit/delete), without needing to touch
@@ -1662,6 +1684,9 @@ pub fn slugify(title: &str, max_len: usize) -> String {
 
 pub fn set_cover(db: &Path, album_id: i64, front: Option<&Path>, back: Option<&Path>) -> Result<()> {
     ensure_not_real_collection(db)?;
+    if is_music_collector_running()? {
+        bail!("Music Collector est actuellement lancé — fermez l'application avant d'écrire.");
+    }
     let db_path = resolve_db_path(db);
     let images = images_dir(db);
     std::fs::create_dir_all(&images)?;

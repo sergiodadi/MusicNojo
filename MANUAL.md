@@ -98,6 +98,10 @@ compile it from source, see [`BUILD.md`](BUILD.md).
   timestamped backup of the file, and is refused outright — with no
   override reachable from the application — if the path looks like the
   real collection.
+- Every write is also refused outright if **Music Collector itself is
+  currently running** — writing to the file while the app holds it
+  open risks an inconsistent result, or the app silently overwriting
+  the change on its next save. Close Music Collector first.
 - MusicNojo can open the real collection in **read-only** mode to
   browse it (opening it is always `SQLITE_OPEN_READ_ONLY` at the
   database level), but none of the write actions above have any

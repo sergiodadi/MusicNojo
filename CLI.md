@@ -188,9 +188,14 @@ Before writing, `commit` and `set-cover` both check, in order:
 1. the database path **does not look like** the real Music Collector
    collection (`~/Documents/Collectorz/...`) — refusal otherwise, with
    no override;
-2. a timestamped backup of `Music_data` is created in `backups/`, next
+2. **Music Collector itself is not currently running** (checked via
+   `pgrep`) — refusal otherwise, since writing to `Music_data` while
+   the app holds it open risks an inconsistent WAL, or the app
+   silently overwriting the change on its next save. Close the app
+   first, then retry;
+3. a timestamped backup of `Music_data` is created in `backups/`, next
    to the database;
-3. the SQL runs in a single transaction (`commit`) or the file copy
+4. the SQL runs in a single transaction (`commit`) or the file copy
    plus column updates happen (`set-cover`).
 
 ### Why an independent database, separate from Music Collector

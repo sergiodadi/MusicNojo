@@ -2,9 +2,9 @@ use std::path::Path;
 
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
-    load_albums, open_readonly, open_writable, preview_add_album, resolve_db_path, set_cover,
-    AddAlbumPreview, Album, AlbumFields, Connection, ManyToManyInputs, ManyToManyReplaceFlags,
-    RoleInputs, RoleReplaceFlags,
+    is_music_collector_running, load_albums, open_readonly, open_writable, preview_add_album,
+    resolve_db_path, set_cover, AddAlbumPreview, Album, AlbumFields, Connection,
+    ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
 };
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
@@ -236,6 +236,9 @@ fn pick_and_set_cover(app: tauri::AppHandle, path: String, id: i64) {
 fn open_for_write(path: &str) -> Result<Connection, String> {
     let db_path = resolve_db_path(Path::new(path));
     ensure_not_real_collection(&db_path).map_err(|e| e.to_string())?;
+    if is_music_collector_running().map_err(|e| e.to_string())? {
+        return Err("Music Collector est actuellement lancé — fermez l'application avant d'écrire.".to_string());
+    }
     backup_database(&db_path).map_err(|e| e.to_string())?;
     open_writable(&db_path).map_err(|e| e.to_string())
 }

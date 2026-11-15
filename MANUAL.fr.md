@@ -106,6 +106,11 @@ voir [`BUILD.fr.md`](BUILD.fr.md).
   fichier, et est purement et simplement refusée — sans aucun
   contournement accessible depuis l'application — si le chemin
   ressemble à la vraie collection.
+- Chaque écriture est aussi refusée purement et simplement si
+  **Music Collector lui-même est actuellement lancé** — écrire dans le
+  fichier pendant que l'application le garde ouvert risque un résultat
+  incohérent, ou que l'application écrase le changement à sa prochaine
+  sauvegarde. Fermer Music Collector d'abord.
 - MusicNojo peut ouvrir la vraie collection en mode **lecture seule**
   pour la parcourir (l'ouverture se fait toujours en
   `SQLITE_OPEN_READ_ONLY` au niveau de la base), mais aucune des

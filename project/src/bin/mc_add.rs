@@ -4,8 +4,8 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
-    open_readonly, resolve_db_path, set_cover, AlbumFields, ManyToManyInputs,
-    ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags, ENT_ALBUM,
+    is_music_collector_running, open_readonly, resolve_db_path, set_cover, AlbumFields,
+    ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags, ENT_ALBUM,
 };
 use rusqlite::{Connection, OpenFlags};
 
@@ -245,6 +245,9 @@ fn main() -> Result<()> {
         }
         Command::Commit { db, plan } => {
             ensure_not_real_collection(&db)?;
+            if is_music_collector_running()? {
+                bail!("Music Collector est actuellement lancé — fermez l'application avant d'écrire.");
+            }
             let db_path = resolve_db_path(&db);
             let plan_sql = std::fs::read_to_string(&plan)
                 .with_context(|| format!("lecture de {}", plan.display()))?;

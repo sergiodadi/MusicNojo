@@ -198,9 +198,14 @@ l'ordre :
 1. le chemin de la base **ne ressemble pas** à la vraie collection
    Music Collector (`~/Documents/Collectorz/...`) — refus sinon, sans
    contournement possible ;
-2. une sauvegarde horodatée de `Music_data` est créée dans
+2. **Music Collector lui-même n'est pas actuellement lancé** (vérifié
+   via `pgrep`) — refus sinon, car écrire dans `Music_data` pendant
+   que l'application le garde ouvert risque un WAL incohérent, ou que
+   l'application écrase le changement à sa prochaine sauvegarde.
+   Fermer l'application d'abord, puis réessayer ;
+3. une sauvegarde horodatée de `Music_data` est créée dans
    `backups/`, à côté de la base ;
-3. le SQL s'exécute en une seule transaction (`commit`), ou la copie
+4. le SQL s'exécute en une seule transaction (`commit`), ou la copie
    de fichier plus les mises à jour de colonnes ont lieu (`set-cover`).
 
 ### Pourquoi une base indépendante, séparée de Music Collector
