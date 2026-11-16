@@ -528,6 +528,11 @@ header h1 { font-size: 1.1rem; margin: 0; flex-shrink: 0; }
 #count { color: #666; font-size: 0.85rem; flex-shrink: 0; margin-left: auto; }
 #stats-btn { padding: 0.4rem 0.8rem; cursor: pointer; flex-shrink: 0; white-space: nowrap; }
 #stats-btn.active { background: #6a7fe0; color: #fff; border-color: #6a7fe0; }
+#lang-toggle { display: flex; flex-shrink: 0; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+#lang-toggle button { border: none; background: #fff; padding: 0.3rem 0.5rem; min-width: 1.8rem; font-size: 0.75rem; font-weight: 600; cursor: pointer; color: #666; white-space: nowrap; }
+#lang-toggle button:hover { background: #f5f7ff; }
+#lang-toggle button + button { border-left: 1px solid #ddd; }
+#lang-toggle button.active { background: #6a7fe0; color: #fff; }
 #tabs { display: flex; gap: 0.4rem; padding: 0.4rem 1rem; overflow-x: auto; background: #f0f2ff; border-bottom: 1px solid #ddd; flex-shrink: 0; }
 #tabs .tab { flex: 0 0 auto; padding: 0.3rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 500; white-space: nowrap; cursor: pointer; background: #e4e9ff; border: 1px solid #c3d2f7; color: #2e4bb0; }
 #tabs .tab:hover { background: #dce5fb; border-color: #6a7fe0; }
@@ -621,11 +626,166 @@ let collCounts = new Map(), collectionsList = [], currentCollection = null;
 const PAGE_SIZE = 60;
 const DEFAULT_COLLECTION_KEY = "__default__";
 
+// Same i18n shape and FR copy as the app itself (app/src/app.js) — kept
+// deliberately separate from that larger dictionary since this export
+// only ever needs the read/browse-only subset of keys (no add/edit/
+// delete, no cover-setting).
+const I18N = {
+  en: {
+    search_placeholder: "Search by title or artist…",
+    count_albums: "{n} album(s)",
+    nav_stats: "📊 Statistics",
+    nav_back_to_collection: "← Back to collection",
+    group_all: "All",
+    azbar_all: "All",
+    group_sort_tooltip_active: "Sorted by count — click to sort alphabetically",
+    group_sort_tooltip_inactive: "Sorted alphabetically — click to sort by count",
+    collection_default: "My Collection",
+    opt_group_artists: "Artist",
+    opt_group_genres: "Genre",
+    opt_group_format: "Format",
+    opt_group_country: "Country",
+    opt_group_label: "Label",
+    opt_sort_title: "Title (A→Z)",
+    opt_sort_artist: "Artist (A→Z)",
+    opt_sort_year_desc: "Year (newest first)",
+    opt_sort_label: "Label (A→Z)",
+    list_view_list: "☰ List",
+    list_view_grid: "▦ Grid",
+    list_prev: "‹ Prev.",
+    list_next: "Next ›",
+    list_page_info: "Page {page} of {total}",
+    col_title: "Title",
+    col_artists: "Artist(s)",
+    col_genres: "Genre(s)",
+    col_format: "Format",
+    col_year: "Year",
+    col_tracks: "Tracks",
+    detail_select: "Select an album.",
+    detail_disc: "Disc {n}",
+    detail_tracks: "Tracks",
+    detail_field_artists: "Artist(s)",
+    detail_field_composers: "Composer(s)",
+    detail_field_conductors: "Conductor(s)",
+    detail_field_musicians: "Musician(s)",
+    detail_field_orchestras: "Orchestra(s)",
+    detail_field_choruses: "Chorus(es)",
+    detail_field_genres: "Genre(s)",
+    detail_field_tags: "Tag(s)",
+    detail_field_label: "Label",
+    detail_field_format: "Format",
+    detail_field_country: "Country",
+    detail_field_year: "Year",
+    detail_field_rating: "Rating",
+    detail_field_notes: "Notes",
+    detail_field_upc: "UPC",
+    detail_field_date_added: "Date added",
+    stats_title: "Statistics — {name}",
+    stats_albums: "{n} album(s)",
+    stats_tracks: "{n} track(s)",
+    stats_no_cover: "{n} with no cover",
+    stats_no_artist: "{n} with no artist",
+    stats_genres: "Genres",
+    stats_formats: "Formats",
+    stats_countries: "Countries",
+    stats_labels_top10: "Labels (top 10)",
+    stats_by_decade: "By release decade",
+    stats_by_added_year: "By year added",
+    stats_no_data: "No data.",
+  },
+  fr: {
+    search_placeholder: "Rechercher par titre ou artiste…",
+    count_albums: "{n} album(s)",
+    nav_stats: "📊 Statistiques",
+    nav_back_to_collection: "← Retour à la collection",
+    group_all: "Tous",
+    azbar_all: "Tout",
+    group_sort_tooltip_active: "Trié par nombre — cliquer pour trier par ordre alphabétique",
+    group_sort_tooltip_inactive: "Trié par ordre alphabétique — cliquer pour trier par nombre",
+    collection_default: "Ma collection",
+    opt_group_artists: "Artiste",
+    opt_group_genres: "Genre",
+    opt_group_format: "Format",
+    opt_group_country: "Pays",
+    opt_group_label: "Label",
+    opt_sort_title: "Titre (A→Z)",
+    opt_sort_artist: "Artiste (A→Z)",
+    opt_sort_year_desc: "Année (plus récent d'abord)",
+    opt_sort_label: "Label (A→Z)",
+    list_view_list: "☰ Liste",
+    list_view_grid: "▦ Grille",
+    list_prev: "‹ Préc.",
+    list_next: "Suiv. ›",
+    list_page_info: "Page {page} / {total}",
+    col_title: "Titre",
+    col_artists: "Artiste(s)",
+    col_genres: "Genre(s)",
+    col_format: "Format",
+    col_year: "Année",
+    col_tracks: "Pistes",
+    detail_select: "Sélectionnez un album.",
+    detail_disc: "Disque {n}",
+    detail_tracks: "Pistes",
+    detail_field_artists: "Artiste(s)",
+    detail_field_composers: "Compositeur(s)",
+    detail_field_conductors: "Chef(s) d'orchestre",
+    detail_field_musicians: "Musicien(s)",
+    detail_field_orchestras: "Orchestre(s)",
+    detail_field_choruses: "Chœur(s)",
+    detail_field_genres: "Genre(s)",
+    detail_field_tags: "Étiquette(s)",
+    detail_field_label: "Label",
+    detail_field_format: "Format",
+    detail_field_country: "Pays",
+    detail_field_year: "Année",
+    detail_field_rating: "Note",
+    detail_field_notes: "Notes",
+    detail_field_upc: "UPC",
+    detail_field_date_added: "Date d'ajout",
+    stats_title: "Statistiques — {name}",
+    stats_albums: "{n} album(s)",
+    stats_tracks: "{n} piste(s)",
+    stats_no_cover: "{n} sans pochette",
+    stats_no_artist: "{n} sans artiste",
+    stats_genres: "Genres",
+    stats_formats: "Formats",
+    stats_countries: "Pays",
+    stats_labels_top10: "Labels (top 10)",
+    stats_by_decade: "Par décennie de sortie",
+    stats_by_added_year: "Par année d'ajout",
+    stats_no_data: "Aucune donnée.",
+  },
+};
+let lang = "en";
+function t(key, vars) {
+  let text = (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key;
+  if (vars) for (const [k, v] of Object.entries(vars)) text = text.replace(`{${k}}`, v);
+  return text;
+}
+function applyStaticLabels() {
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.getElementById("lang-en").classList.toggle("active", lang === "en");
+  document.getElementById("lang-fr").classList.toggle("active", lang === "fr");
+  document.documentElement.lang = lang;
+}
+function setLang(newLang) {
+  lang = newLang;
+  applyStaticLabels();
+  renderTabs();
+  renderGroups();
+  render(document.getElementById("search").value);
+  if (currentDetailId !== null) showDetail(currentDetailId); else clearDetail();
+  if (panel === "stats") renderStats();
+}
+document.getElementById("lang-en").addEventListener("click", () => setLang("en"));
+document.getElementById("lang-fr").addEventListener("click", () => setLang("fr"));
+
 function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 function collectionKey(a) { return a.collection || DEFAULT_COLLECTION_KEY; }
-function collectionLabel(k) { return k === DEFAULT_COLLECTION_KEY ? "My Collection" : k; }
+function collectionLabel(k) { return k === DEFAULT_COLLECTION_KEY ? t("collection_default") : k; }
 function groupValues(a, field) {
   const v = a[field];
   if (Array.isArray(v)) return v;
@@ -676,7 +836,7 @@ function renderAzBar() {
   const el = document.getElementById("azbar");
   el.innerHTML = "";
   const all = document.createElement("button");
-  all.textContent = "All";
+  all.textContent = t("azbar_all");
   all.className = selectedLetter === null ? "active" : "";
   all.addEventListener("click", () => { selectedLetter = null; renderGroups(); });
   el.appendChild(all);
@@ -706,7 +866,7 @@ function renderGroups() {
   const list = document.getElementById("group-list");
   list.innerHTML =
     `<div class="${selectedGroup === null ? "selected" : ""}" data-group="">
-       <span>All</span><span class="group-count sortable${groupSortByCount ? " sort-active" : ""}" id="group-sort-toggle" title="Click to toggle alphabetical/count order">${total}</span>
+       <span>${t("group_all")}</span><span class="group-count sortable${groupSortByCount ? " sort-active" : ""}" id="group-sort-toggle" title="${groupSortByCount ? t("group_sort_tooltip_active") : t("group_sort_tooltip_inactive")}">${total}</span>
      </div>` +
     sorted.map(([value, count]) => `<div class="${value === selectedGroup ? "selected" : ""}" data-group="${escapeHtml(value)}">
       <span>${escapeHtml(value)}</span><span class="group-count">${count}</span>
@@ -750,30 +910,30 @@ function showDetail(id) {
   const a = albums.find(x => x.id === id);
   if (!a) return;
   const discs = (a.discs || []).map((disc, i) => {
-    const heading = disc.index ? `Disc ${escapeHtml(disc.index)}` : (a.discs.length > 1 ? `Disc ${i + 1}` : "Tracks");
-    const tracks = disc.tracks.map(t => `<li>${escapeHtml(t.title)}${t.length ? ` — ${escapeHtml(t.length)}` : ""}</li>`).join("");
+    const heading = disc.index ? t("detail_disc", { n: escapeHtml(disc.index) }) : (a.discs.length > 1 ? t("detail_disc", { n: i + 1 }) : t("detail_tracks"));
+    const tracks = disc.tracks.map(tr => `<li>${escapeHtml(tr.title)}${tr.length ? ` — ${escapeHtml(tr.length)}` : ""}</li>`).join("");
     return `<div class="disc-heading">${heading}</div><ol>${tracks}</ol>`;
   }).join("");
   document.getElementById("detail-content").innerHTML = `
     ${coverImg(a)}
     <h2>${escapeHtml(a.title)}</h2>
     <dl>
-      ${clickableRoleList("Artist(s)", a.artists, "artists")}
-      ${roleList("Composer(s)", a.composers)}
-      ${roleList("Conductor(s)", a.conductors)}
-      ${roleList("Musician(s)", a.musicians)}
-      ${roleList("Orchestra(s)", a.orchestras)}
-      ${roleList("Chorus(es)", a.choruses)}
-      ${clickableRoleList("Genre(s)", a.genres, "genres")}
-      ${roleList("Tag(s)", a.tags)}
-      ${field("Label", a.label)}
-      ${field("Format", a.format)}
-      ${field("Country", a.country)}
-      ${field("Year", a.release_year)}
-      ${field("Rating", a.rating != null ? String(a.rating) : "")}
-      ${field("Notes", a.notes)}
-      ${field("UPC", a.upc)}
-      ${field("Date added", a.date_added)}
+      ${clickableRoleList(t("detail_field_artists"), a.artists, "artists")}
+      ${roleList(t("detail_field_composers"), a.composers)}
+      ${roleList(t("detail_field_conductors"), a.conductors)}
+      ${roleList(t("detail_field_musicians"), a.musicians)}
+      ${roleList(t("detail_field_orchestras"), a.orchestras)}
+      ${roleList(t("detail_field_choruses"), a.choruses)}
+      ${clickableRoleList(t("detail_field_genres"), a.genres, "genres")}
+      ${roleList(t("detail_field_tags"), a.tags)}
+      ${field(t("detail_field_label"), a.label)}
+      ${field(t("detail_field_format"), a.format)}
+      ${field(t("detail_field_country"), a.country)}
+      ${field(t("detail_field_year"), a.release_year)}
+      ${field(t("detail_field_rating"), a.rating != null ? String(a.rating) : "")}
+      ${field(t("detail_field_notes"), a.notes)}
+      ${field(t("detail_field_upc"), a.upc)}
+      ${field(t("detail_field_date_added"), a.date_added)}
     </dl>
     ${discs}
   `;
@@ -782,7 +942,7 @@ function showDetail(id) {
 }
 function clearDetail() {
   currentDetailId = null;
-  document.getElementById("detail-content").innerHTML = `<p id="detail-empty">Select an album.</p>`;
+  document.getElementById("detail-content").innerHTML = `<p id="detail-empty">${t("detail_select")}</p>`;
 }
 
 function render(filterText) {
@@ -804,7 +964,7 @@ function render(filterText) {
   const start = (page - 1) * PAGE_SIZE;
   const pageRows = rows.slice(start, start + PAGE_SIZE);
 
-  document.getElementById("count").textContent = `${rows.length} album(s)`;
+  document.getElementById("count").textContent = t("count_albums", { n: rows.length });
   const body = document.querySelector("#albums tbody");
   body.innerHTML = pageRows.map(a => `<tr data-id="${a.id}">
     <td>${escapeHtml(a.title)}</td>
@@ -823,7 +983,7 @@ function render(filterText) {
   }).join("");
   grid.querySelectorAll(".grid-tile").forEach(tile => tile.addEventListener("click", () => showDetail(Number(tile.dataset.id))));
 
-  document.getElementById("page-info").textContent = `Page ${page} of ${totalPages}`;
+  document.getElementById("page-info").textContent = t("list_page_info", { page, total: totalPages });
   document.getElementById("prev-page").disabled = page <= 1;
   document.getElementById("next-page").disabled = page >= totalPages;
 }
@@ -917,41 +1077,41 @@ function barList(title, entries, limit) {
       <span class="bar-wrap"><span class="bar" style="width:${((count / max) * 100).toFixed(1)}%"></span></span>
       <span class="val">${count}</span>
     </div>`).join("");
-  return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || `<p class="stat-empty">No data.</p>`}</div>`;
+  return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || `<p class="stat-empty">${t("stats_no_data")}</p>`}</div>`;
 }
 function albumListHtml(albumsList) {
-  if (!albumsList.length) return `<p class="stat-empty">No data.</p>`;
+  if (!albumsList.length) return `<p class="stat-empty">${t("stats_no_data")}</p>`;
   return `<ul class="stat-detail-list">${albumsList.map(a => `<li>${escapeHtml(a.artists.join(", ") || "—")} — ${escapeHtml(a.title)}</li>`).join("")}</ul>`;
 }
 const statsExpanded = new Set();
-function statLink(key, label, n) {
+function statLink(key, labelKey, n) {
   const expanded = statsExpanded.has(key);
-  return `<span class="stat-link${expanded ? " expanded" : ""}" data-stat-key="${key}">${n} ${label}</span>`;
+  return `<span class="stat-link${expanded ? " expanded" : ""}" data-stat-key="${key}">${t(labelKey, { n: `<strong>${n}</strong>` })}</span>`;
 }
 function renderStats() {
   const s = computeStats();
-  const detailBlock = (key, label, n, list) => {
+  const detailBlock = (key, labelKey, n, list) => {
     if (!statsExpanded.has(key)) return "";
-    return `<div class="stat-detail"><h4>${n} ${label}</h4>${albumListHtml(list)}</div>`;
+    return `<div class="stat-detail"><h4>${escapeHtml(t(labelKey, { n }))}</h4>${albumListHtml(list)}</div>`;
   };
   document.getElementById("stats-pane").innerHTML = `
     <div class="stats-wrap">
-      <h2>Statistics — ${escapeHtml(collectionLabel(currentCollection))}</h2>
+      <h2>${escapeHtml(t("stats_title", { name: collectionLabel(currentCollection) }))}</h2>
       <div class="stat-summary">
-        <span><strong>${s.totalAlbums}</strong> album(s)</span>
-        <span><strong>${s.totalTracks}</strong> track(s)</span>
-        ${statLink("noCover", "with no cover", s.noCover)}
-        ${statLink("noArtist", "with no artist", s.noArtist)}
+        <span>${t("stats_albums", { n: `<strong>${s.totalAlbums}</strong>` })}</span>
+        <span>${t("stats_tracks", { n: `<strong>${s.totalTracks}</strong>` })}</span>
+        ${statLink("noCover", "stats_no_cover", s.noCover)}
+        ${statLink("noArtist", "stats_no_artist", s.noArtist)}
       </div>
-      ${detailBlock("noCover", "with no cover", s.noCover, s.noCoverAlbums)}
-      ${detailBlock("noArtist", "with no artist", s.noArtist, s.noArtistAlbums)}
+      ${detailBlock("noCover", "stats_no_cover", s.noCover, s.noCoverAlbums)}
+      ${detailBlock("noArtist", "stats_no_artist", s.noArtist, s.noArtistAlbums)}
       <div class="stat-grid">
-        ${barList("Genres", s.genres, 15)}
-        ${barList("Formats", s.formats)}
-        ${barList("Countries", s.countries)}
-        ${barList("Labels (top 10)", s.labels, 10)}
-        ${barList("By release decade", s.decades)}
-        ${barList("By year added", s.addedYears)}
+        ${barList(t("stats_genres"), s.genres, 15)}
+        ${barList(t("stats_formats"), s.formats)}
+        ${barList(t("stats_countries"), s.countries)}
+        ${barList(t("stats_labels_top10"), s.labels, 10)}
+        ${barList(t("stats_by_decade"), s.decades)}
+        ${barList(t("stats_by_added_year"), s.addedYears)}
       </div>
     </div>`;
   document.querySelectorAll(".stat-link").forEach(el => el.addEventListener("click", () => {
@@ -965,11 +1125,12 @@ function setPanel(next) {
   panel = next;
   document.body.classList.toggle("panel-stats", panel === "stats");
   statsBtn.classList.toggle("active", panel === "stats");
-  statsBtn.textContent = panel === "stats" ? "← Back to collection" : "📊 Statistics";
+  statsBtn.textContent = panel === "stats" ? t("nav_back_to_collection") : t("nav_stats");
   if (panel === "stats") renderStats();
 }
 statsBtn.addEventListener("click", () => setPanel(panel === "stats" ? "library" : "stats"));
 
+applyStaticLabels();
 computeCollections();
 renderTabs();
 renderGroups();
@@ -1091,19 +1252,23 @@ pub fn write_html(path: &Path, albums: &[Album], images_dir: &Path) -> Result<()
 <body>
 <header>
   <h1>MusicNojo</h1>
-  <input id="search" type="search" placeholder="Search by title or artist…" autofocus>
+  <input id="search" type="search" data-i18n-placeholder="search_placeholder" placeholder="Search by title or artist…" autofocus>
   <span id="count"></span>
-  <button id="stats-btn">📊 Statistics</button>
+  <button id="stats-btn" data-i18n="nav_stats">📊 Statistics</button>
+  <span id="lang-toggle">
+    <button id="lang-en" type="button">EN</button>
+    <button id="lang-fr" type="button">FR</button>
+  </span>
 </header>
 <div id="tabs"></div>
 <main id="main">
   <aside id="groups">
     <select id="group-field">
-      <option value="artists">Artist</option>
-      <option value="genres">Genre</option>
-      <option value="format">Format</option>
-      <option value="country">Country</option>
-      <option value="label">Label</option>
+      <option value="artists" data-i18n="opt_group_artists">Artist</option>
+      <option value="genres" data-i18n="opt_group_genres">Genre</option>
+      <option value="format" data-i18n="opt_group_format">Format</option>
+      <option value="country" data-i18n="opt_group_country">Country</option>
+      <option value="label" data-i18n="opt_group_label">Label</option>
     </select>
     <div id="azbar"></div>
     <div id="group-list"></div>
@@ -1112,36 +1277,36 @@ pub fn write_html(path: &Path, albums: &[Album], images_dir: &Path) -> Result<()
     <div id="list-pane">
       <div id="list-toolbar">
         <select id="sort">
-          <option value="title">Title (A→Z)</option>
-          <option value="artist">Artist (A→Z)</option>
-          <option value="year_desc">Year (newest first)</option>
-          <option value="label">Label (A→Z)</option>
+          <option value="title" data-i18n="opt_sort_title">Title (A→Z)</option>
+          <option value="artist" data-i18n="opt_sort_artist">Artist (A→Z)</option>
+          <option value="year_desc" data-i18n="opt_sort_year_desc">Year (newest first)</option>
+          <option value="label" data-i18n="opt_sort_label">Label (A→Z)</option>
         </select>
         <div id="view-toggle">
-          <button id="view-list" class="active">☰ List</button>
-          <button id="view-grid">▦ Grid</button>
+          <button id="view-list" class="active" data-i18n="list_view_list">☰ List</button>
+          <button id="view-grid" data-i18n="list_view_grid">▦ Grid</button>
         </div>
       </div>
       <table id="albums">
         <thead><tr>
-          <th data-k="title">Title</th>
-          <th data-k="artists">Artist(s)</th>
-          <th data-k="genres">Genre(s)</th>
-          <th data-k="format">Format</th>
-          <th data-k="release_year">Year</th>
-          <th data-k="track_count">Tracks</th>
+          <th data-k="title" data-i18n="col_title">Title</th>
+          <th data-k="artists" data-i18n="col_artists">Artist(s)</th>
+          <th data-k="genres" data-i18n="col_genres">Genre(s)</th>
+          <th data-k="format" data-i18n="col_format">Format</th>
+          <th data-k="release_year" data-i18n="col_year">Year</th>
+          <th data-k="track_count" data-i18n="col_tracks">Tracks</th>
         </tr></thead>
         <tbody></tbody>
       </table>
       <div id="grid-view"></div>
       <div id="pager">
-        <button id="prev-page">‹ Prev.</button>
+        <button id="prev-page" data-i18n="list_prev">‹ Prev.</button>
         <span id="page-info"></span>
-        <button id="next-page">Next ›</button>
+        <button id="next-page" data-i18n="list_next">Next ›</button>
       </div>
     </div>
     <aside id="detail">
-      <div id="detail-content"><p id="detail-empty">Select an album.</p></div>
+      <div id="detail-content"><p id="detail-empty" data-i18n="detail_select">Select an album.</p></div>
     </aside>
   </div>
 </main>

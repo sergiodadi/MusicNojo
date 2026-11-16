@@ -85,8 +85,8 @@ sub-collection, including the same "no cover"/"no artist" expandable
 lists the application has (read-only here — no click-to-fix, since
 this page can't write anything).
 
-English only (no language toggle), and there is **no add/edit/delete
-form** — unlike BookNojo's own static export, which has a
+Has the same **EN / FR** toggle as the application, and there is **no
+add/edit/delete form** — unlike BookNojo's own static export, which has a
 preview-only form that downloads a JSON file for its CLI tool to
 read. `mc_add` already covers adding/editing/deleting directly and
 more safely (a reviewable plan before any real write), so a

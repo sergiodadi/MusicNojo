@@ -90,7 +90,7 @@ sous-collection active, avec les mêmes listes déroulantes "sans
 pochette"/"sans artiste" que l'application (en lecture seule ici —
 pas de correction en un clic, cette page ne pouvant rien écrire).
 
-Anglais uniquement (pas de bascule de langue), et il n'y a **pas de
+Elle a la même bascule **EN / FR** que l'application, et il n'y a **pas de
 formulaire d'ajout/modification/suppression** — contrairement à
 l'export statique de BookNojo, qui a un formulaire d'aperçu
 téléchargeant un JSON pour son outil en ligne de commande. `mc_add`
