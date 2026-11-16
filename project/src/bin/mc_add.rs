@@ -4,8 +4,9 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
-    is_music_collector_running, open_readonly, resolve_db_path, set_cover, AlbumFields,
-    ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags, ENT_ALBUM,
+    is_music_collector_running, looks_like_real_collection, open_readonly, resolve_db_path,
+    set_cover, AlbumFields, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
+    ENT_ALBUM,
 };
 use rusqlite::{Connection, OpenFlags};
 
@@ -77,6 +78,10 @@ enum Command {
         db: PathBuf,
         #[arg(long)]
         plan: PathBuf,
+        /// Allows writing even if --db looks like the real Music Collector
+        /// collection — a typed "OUI" confirmation is still required.
+        #[arg(long)]
+        force: bool,
     },
     /// Copies a local image into the package's Images/ folder (named like
     /// the app's own covers: "<id>_f_<slug>.<ext>" / "<id>_b_<slug>.<ext>")
@@ -94,6 +99,10 @@ enum Command {
         /// Local image file to use as the back cover
         #[arg(long)]
         back: Option<PathBuf>,
+        /// Allows writing even if --db looks like the real Music Collector
+        /// collection — a typed "OUI" confirmation is still required.
+        #[arg(long)]
+        force: bool,
     },
     /// Bootstraps a new, independent ".mnc" database from an existing
     /// collection (database + Images/ folder) — a one-time copy, never
@@ -110,6 +119,37 @@ enum Command {
         #[arg(long)]
         dest: Option<PathBuf>,
     },
+}
+
+/// Second, independent gate on top of `--force` : même avec le flag, une
+/// vraie écriture sur ce qui ressemble à la vraie collection exige de
+/// taper "OUI" de façon interactive. Prend `input`/`out` plutôt que de
+/// toucher stdin/stdout directement pour que la logique du prompt soit
+/// testable sans terminal ni fichier réel — même forme que celle de
+/// BookNojo.
+fn confirm_real_write<R: std::io::BufRead, W: std::io::Write>(
+    input: &mut R,
+    out: &mut W,
+    db_path: &Path,
+    real_prefix: &Path,
+) -> Result<()> {
+    writeln!(
+        out,
+        "⚠️  ATTENTION : {} se trouve sous {} — ceci est la VRAIE collection Music Collector, pas une copie de test.",
+        db_path.display(),
+        real_prefix.display()
+    )?;
+    writeln!(out, "   Une sauvegarde horodatée sera prise avant d'écrire, mais cette opération")?;
+    writeln!(out, "   modifie directement vos données réelles.")?;
+    write!(out, "   Tapez exactement OUI pour continuer (autre chose annule) : ")?;
+    out.flush()?;
+    let mut answer = String::new();
+    input.read_line(&mut answer)?;
+    if answer.trim() == "OUI" {
+        Ok(())
+    } else {
+        bail!("Confirmation refusée ou incorrecte (réponse attendue : OUI, exactement) — aucune écriture effectuée.");
+    }
 }
 
 fn open_readonly_with_path(db: &Path) -> Result<(PathBuf, Connection)> {
@@ -243,8 +283,25 @@ fn main() -> Result<()> {
             let plan_sql = build_delete_plan(&conn, id)?;
             emit_plan(&plan_sql, out, &db_path)?;
         }
-        Command::Commit { db, plan } => {
-            ensure_not_real_collection(&db)?;
+        Command::Commit { db, plan, force } => {
+            match (force, looks_like_real_collection(&db)) {
+                (false, Some(real_prefix)) => {
+                    bail!(
+                        "{} se trouve sous {} — ça ressemble à la vraie collection.\n\
+                         Cette commande écrit réellement dans la base : utilisez une copie dédiée,\n\
+                         ou passez --force si vous savez vraiment ce que vous faites.",
+                        db.display(),
+                        real_prefix.display()
+                    );
+                }
+                (true, Some(real_prefix)) => {
+                    let stdin = std::io::stdin();
+                    let mut locked = stdin.lock();
+                    let mut stdout = std::io::stdout();
+                    confirm_real_write(&mut locked, &mut stdout, &db, &real_prefix)?;
+                }
+                (_, None) => {}
+            }
             if is_music_collector_running()? {
                 bail!("Music Collector est actuellement lancé — fermez l'application avant d'écrire.");
             }
@@ -266,8 +323,27 @@ fn main() -> Result<()> {
             id,
             front,
             back,
+            force,
         } => {
-            set_cover(&db, id, front.as_deref(), back.as_deref())?;
+            match (force, looks_like_real_collection(&db)) {
+                (false, Some(real_prefix)) => {
+                    bail!(
+                        "{} se trouve sous {} — ça ressemble à la vraie collection.\n\
+                         Cette commande écrit réellement dans la base : utilisez une copie dédiée,\n\
+                         ou passez --force si vous savez vraiment ce que vous faites.",
+                        db.display(),
+                        real_prefix.display()
+                    );
+                }
+                (true, Some(real_prefix)) => {
+                    let stdin = std::io::stdin();
+                    let mut locked = stdin.lock();
+                    let mut stdout = std::io::stdout();
+                    confirm_real_write(&mut locked, &mut stdout, &db, &real_prefix)?;
+                }
+                (_, None) => {}
+            }
+            set_cover(&db, id, front.as_deref(), back.as_deref(), force)?;
         }
         Command::Import { source, dest } => {
             cmd_import(source, dest)?;
@@ -292,6 +368,26 @@ mod tests {
             default_import_dest(Path::new("Already.mnc")),
             PathBuf::from("collection/Already.mnc")
         );
+    }
+
+    fn confirm(answer: &str) -> Result<()> {
+        let mut input = std::io::Cursor::new(answer.as_bytes());
+        let mut out = Vec::new();
+        confirm_real_write(&mut input, &mut out, Path::new("/x/Documents/Collectorz/y"), Path::new("/x/Documents/Collectorz"))
+    }
+
+    #[test]
+    fn confirm_real_write_accepts_only_an_exact_oui() {
+        assert!(confirm("OUI\n").is_ok());
+        // Les espaces en fin de ligne venant du terminal sont tolérés...
+        assert!(confirm("OUI \n").is_ok());
+        // ...mais tout le reste — y compris une minuscule ou un simple
+        // Entrée — doit refuser. C'est le garde-fou de sécurité : il ne
+        // doit jamais réussir par accident.
+        assert!(confirm("oui\n").is_err());
+        assert!(confirm("yes\n").is_err());
+        assert!(confirm("\n").is_err());
+        assert!(confirm("").is_err());
     }
 
     fn make_writable(path: &Path) -> Result<()> {

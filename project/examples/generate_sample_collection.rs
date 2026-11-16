@@ -584,7 +584,7 @@ fn main() -> Result<()> {
 
         let front = write_cover(&scratch, "front.jpg", &placeholder_cover(&album, true)?)?;
         let back = write_cover(&scratch, "back.jpg", &placeholder_cover(&album, false)?)?;
-        set_cover(root, id, Some(&front), Some(&back))?;
+        set_cover(root, id, Some(&front), Some(&back), false)?;
     }
 
     let _ = std::fs::remove_dir_all(&scratch);

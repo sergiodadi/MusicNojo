@@ -1756,10 +1756,26 @@ fn many_to_many_spec(key: &str) -> &'static ManyToManySpec {
 /// Refuses to operate on what looks like a real, live Music Collector
 /// collection — only ever a test/working copy. Same hard rule as the
 /// BookNojo project's tools.
-pub fn ensure_not_real_collection(path: &Path) -> Result<()> {
+/// Renvoie `~/Documents/Collectorz` si `path` ressemble à une vraie
+/// collection Music Collector en cours d'utilisation — permet à un
+/// appelant de réagir différemment (le `--force` de la CLI) plutôt que
+/// de toujours refuser comme `ensure_not_real_collection` ci-dessous.
+/// Même forme que le `looks_like_real_collection` de BookNojo, juste
+/// avec une détection propre à cette app.
+pub fn looks_like_real_collection(path: &Path) -> Option<PathBuf> {
     let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let text = canonical.to_string_lossy().to_lowercase();
     if text.contains("collectorz") && (text.contains("music collector") || text.contains("music_collector")) {
+        let home = std::env::var_os("HOME")?;
+        Some(PathBuf::from(home).join("Documents").join("Collectorz"))
+    } else {
+        None
+    }
+}
+
+pub fn ensure_not_real_collection(path: &Path) -> Result<()> {
+    if looks_like_real_collection(path).is_some() {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         bail!(
             "{} ressemble au chemin d'une vraie collection Music Collector \
              (~/Documents/Collectorz/...) — refusé. N'utiliser que des copies de test.",
@@ -1847,8 +1863,16 @@ pub fn slugify(title: &str, max_len: usize) -> String {
     slug.chars().take(max_len).collect()
 }
 
-pub fn set_cover(db: &Path, album_id: i64, front: Option<&Path>, back: Option<&Path>) -> Result<()> {
-    ensure_not_real_collection(db)?;
+pub fn set_cover(
+    db: &Path,
+    album_id: i64,
+    front: Option<&Path>,
+    back: Option<&Path>,
+    force: bool,
+) -> Result<()> {
+    if !force {
+        ensure_not_real_collection(db)?;
+    }
     if is_music_collector_running()? {
         bail!("Music Collector est actuellement lancé — fermez l'application avant d'écrire.");
     }

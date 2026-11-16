@@ -101,12 +101,11 @@ détour par un JSON téléchargé n'apporterait rien ici.
 ## 4. `mc_add` — ajout, modification, suppression, pochettes
 
 > ⚠️ **Toujours tester sur une copie de sa collection d'abord, jamais
-> directement sur l'original.** `mc_add` refuse purement et simplement
-> d'écrire sur un chemin qui ressemble à la vraie collection Music
-> Collector (`~/Documents/Collectorz/.../Music Collector.../`) — voir
-> § "Garde-fous" ci-dessous. Il n'y a aucun contournement : toujours
-> pointer vers une copie (voir [`BUILD.fr.md`](BUILD.fr.md) pour générer
-> des copies de test dédiées).
+> directement sur l'original.** Par défaut, `mc_add` refuse purement et
+> simplement d'écrire sur un chemin qui ressemble à la vraie collection
+> Music Collector (`~/Documents/Collectorz/.../Music Collector.../`) —
+> voir § "Garde-fous" ci-dessous. Si vous développez ce projet,
+> `BUILD.fr.md` explique comment générer des copies de test dédiées.
 
 ### Planifier, puis valider
 
@@ -196,8 +195,8 @@ Avant d'écrire, `commit` et `set-cover` vérifient tous deux, dans
 l'ordre :
 
 1. le chemin de la base **ne ressemble pas** à la vraie collection
-   Music Collector (`~/Documents/Collectorz/...`) — refus sinon, sans
-   contournement possible ;
+   Music Collector (`~/Documents/Collectorz/...`) — refus immédiat
+   sinon ;
 2. **Music Collector lui-même n'est pas actuellement lancé** (vérifié
    via `pgrep`) — refus sinon, car écrire dans `Music_data` pendant
    que l'application le garde ouvert risque un WAL incohérent, ou que
@@ -207,6 +206,30 @@ l'ordre :
    `backups/`, à côté de la base ;
 4. le SQL s'exécute en une seule transaction (`commit`), ou la copie
    de fichier plus les mises à jour de colonnes ont lieu (`set-cover`).
+
+`--force` lève le refus n°1, mais **n'écrit toujours pas directement** :
+une confirmation tapée à la main dans le terminal prend le relais :
+
+```
+⚠️  ATTENTION : .../MyCollection.mucp/Music_data se trouve sous
+.../Documents/Collectorz — ceci est la VRAIE collection Music Collector,
+pas une copie de test.
+   Une sauvegarde horodatée sera prise avant d'écrire, mais cette
+   opération modifie directement vos données réelles.
+   Tapez exactement OUI pour continuer (autre chose annule) :
+```
+
+Toute réponse autre que `OUI` (en majuscules, exactement) annule
+l'opération — aucune écriture n'a lieu, même avec `--force`.
+
+Avant d'utiliser `--force` sur la vraie collection :
+1. Fermez Music Collector.
+2. Faites une sauvegarde manuelle en plus de celle automatique que
+   `commit`/`set-cover` effectue (ex. copier tout le paquet `.mucp`).
+3. Relisez le SQL du plan (issu de l'étape `*-plan`) — la dernière
+   chance de repérer un problème avant une vraie écriture.
+4. Lancez `commit --force` (ou `set-cover --force`) et tapez `OUI`
+   seulement si tout semble correct.
 
 ### Pourquoi une base indépendante, séparée de Music Collector
 
