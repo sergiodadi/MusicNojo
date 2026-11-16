@@ -2,29 +2,27 @@
 
 > 🇬🇧 [Read in English](README.md)
 
-Gestionnaire de collection de musique — importe la base de données
-d'une collection [Music Collector](https://www.collectorz.com/music)
-(Collectorz) dans ses propres outils, et permet de la parcourir,
-l'exporter et la modifier sans être limité à ce que l'application de
-l'éditeur propose elle-même.
-
-> Projet privé — le dépôt GitHub n'est pas encore public.
-
 ## Pourquoi ce projet
 
-Music Collector pour Mac est une application Intel qui dépend de
-Rosetta 2. Apple a annoncé la fin programmée de Rosetta 2 (support
-complet jusqu'à macOS 27, largement retiré à partir de macOS 28,
-~automne 2027) — Music Collector a donc une espérance de vie limitée
-sur un Mac à jour. MusicNojo lit et écrit une copie d'une collection
-existante avec ses propres outils indépendants — export, consultation,
-ajout, modification, suppression, pochettes — pour qu'une collection
-continue de fonctionner, et de grandir, sans dépendre de Music
+Gestionnaire de collection de musique. Music Collector pour Mac est
+une application Intel qui dépend de Rosetta 2. Apple a annoncé la fin
+programmée de Rosetta 2 (support complet jusqu'à macOS 27, largement
+retiré à partir de macOS 28, ~automne 2027) — Music Collector a donc
+une espérance de vie limitée sur un Mac à jour. MusicNojo importe la
+base de données d'une collection [Music Collector](https://www.collectorz.com/music)
+(Collectorz) dans ses propres outils, et permet de la parcourir,
+l'exporter et la modifier sans être limité à ce que l'application de
+l'éditeur propose elle-même — lisant et écrivant une copie de la
+collection existante avec ses propres outils indépendants (export,
+consultation, ajout, modification, suppression, pochettes), pour
+qu'elle continue de fonctionner, et de grandir, sans dépendre de Music
 Collector pour l'un ou pour l'autre, le jour où il ne tournera plus.
 
 MusicNojo est un projet frère de [BookNojo](https://github.com/sergiodadi/BookNojo)
 (la même approche et le même problème de fond avec Rosetta 2, appliqués
 à Book Collector au lieu de Music Collector).
+
+> Projet privé — le dépôt GitHub n'est pas encore public.
 
 ## Ce qu'il fait aujourd'hui
 
