@@ -5,6 +5,19 @@
 History of **versions published on GitHub**, one entry per
 tag/release — same convention as [BookNojo's CHANGELOG.md](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b5] - 2026-11-16
+
+New `.dmg` (`MusicNojo_0.56.0_aarch64.dmg`). Two additions, for
+homogeneity with BookNojo:
+
+- The static HTML export (`mc_export --html`) now has the same **EN /
+  FR** toggle as the application — it previously stayed in English
+  only.
+- `mc_add commit`/`set-cover` gained a `--force` flag, lifting the
+  automatic refusal on a path that looks like the real Music Collector
+  collection. A typed `OUI` confirmation in the terminal is still
+  required before any real write happens.
+
 ## [v1.0.0b4] - 2026-11-11
 
 New `.dmg` (`MusicNojo_0.53.0_aarch64.dmg`). Fixes the version shown
