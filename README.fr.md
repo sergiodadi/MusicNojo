@@ -22,7 +22,8 @@ MusicNojo est un projet frère de [BookNojo](https://github.com/sergiodadi/BookN
 (la même approche et le même problème de fond avec Rosetta 2, appliqués
 à Book Collector au lieu de Music Collector).
 
-> Projet privé — le dépôt GitHub n'est pas encore public.
+> Projet en développement actif, disponible publiquement depuis le
+> 17/11/2026.
 
 ## Ce qu'il fait aujourd'hui
 
