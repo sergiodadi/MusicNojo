@@ -66,6 +66,11 @@ To compile from source instead of using the `.dmg`, see
 > Tested only on **macOS Tahoe (26)** — not verified on other macOS
 > versions.
 
+## Screenshots
+
+![Library view](screenshots/library.png)
+![Add an album](screenshots/add-album.png)
+
 ## Version history
 
 See [`CHANGELOG.md`](CHANGELOG.md).
