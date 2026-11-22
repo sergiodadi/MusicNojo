@@ -5,6 +5,15 @@
 History of **versions published on GitHub**, one entry per
 tag/release — same convention as [BookNojo's CHANGELOG.md](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b9] - 2026-11-22
+
+- New cover picker in the "Add Album…" form (optional) — no longer
+  necessary to add the album first and set its cover afterwards via
+  Statistics' "no cover" list, though that still works too.
+- Header title and buttons gained the same emoji already used by
+  BookNojo, and the Help window's language toggle now matches the
+  main header's button order.
+
 ## [v1.0.0b8] - 2026-11-22
 
 - "MusicNojo Help > About MusicNojo" (a plain name+version dialog
