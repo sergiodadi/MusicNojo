@@ -5,6 +5,12 @@
 Historique des **versions publiées sur GitHub**, une entrée par
 tag/release — même convention que le [CHANGELOG.md de BookNojo](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b8] - 2026-11-22
+
+- « MusicNojo Help > About MusicNojo » (une simple boîte nom+version
+  qui dupliquait le vrai panneau natif « About ») remplacé par une
+  vraie fenêtre d'aide bilingue « User Guide ».
+
 ## [v1.0.0b7] - 2026-11-22
 
 - Nouvelle icône d'application : un carré plat en dégradé violet avec un

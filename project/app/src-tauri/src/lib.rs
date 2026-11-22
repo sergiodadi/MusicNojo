@@ -20,7 +20,7 @@ const SUPPORTED_MUCP_VERSION: &str = "20.3.2";
 /// every single internal commit, while this tracks the latest published
 /// `.dmg` release tag instead, which is what the user actually downloaded.
 /// Update this by hand whenever a new release is tagged/published.
-const DISPLAY_VERSION: &str = "1.0.0b7";
+const DISPLAY_VERSION: &str = "1.0.0b8";
 
 /// Reads the Music Collector version that created a `.mucp` package,
 /// from its own `preferences.plist` (key `kPreferencesApplicationVersion`).
