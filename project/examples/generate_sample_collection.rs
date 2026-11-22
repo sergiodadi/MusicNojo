@@ -554,7 +554,7 @@ fn main() -> Result<()> {
             collection: None,
         };
         let tracks: Vec<String> = album.tracks.iter().map(|s| s.to_string()).collect();
-        let plan = build_plan(&conn, album.title, &roles, &many, &fields, &tracks)?;
+        let (plan, _album_id) = build_plan(&conn, album.title, &roles, &many, &fields, &tracks)?;
         conn.execute_batch(&plan)?;
 
         let id: i64 = conn.query_row(

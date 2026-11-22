@@ -229,6 +229,25 @@ fn pick_and_set_cover(app: tauri::AppHandle, path: String, id: i64) {
         });
 }
 
+/// Native picker for a cover image at add-time, before the album (and
+/// its `Z_PK`) even exists yet — same async-callback shape as
+/// `pick_and_set_cover`, but the result goes back via `add-cover-picked`
+/// instead of writing anything itself, since there's no album id to
+/// attach the cover to until the add form is actually submitted.
+/// Mirrors BookNojo's `pick_cover_for_new_book`.
+#[tauri::command]
+fn pick_cover_for_new_album(app: tauri::AppHandle) {
+    app.dialog()
+        .file()
+        .set_title("Choose a cover image")
+        .add_filter("Image", &["jpg", "jpeg", "png", "gif", "bmp"])
+        .pick_file(move |file| {
+            let Some(file) = file else { return };
+            let Some(local_path) = file.as_path() else { return };
+            let _ = app.emit("add-cover-picked", local_path.to_string_lossy().to_string());
+        });
+}
+
 /// Shared by add/edit/delete: refuses the real collection (same rule as
 /// the CLI's ensure_not_real_collection — no override reachable from
 /// the GUI, unlike bc_add's CLI which at least requires an explicit
@@ -260,6 +279,14 @@ fn prepare_add_album(
     preview_add_album(&conn, &title, &roles, &many, &fields).map_err(|e| e.to_string())
 }
 
+/// `cover_path` (optional) comes from the "Choose an image…" button in
+/// the Add form (see `pick_cover_for_new_album`): once the album is
+/// created and its `Z_PK` known (returned by `build_plan`), the cover is
+/// set via `set_cover` — a 2nd, independent write, not the same
+/// transaction as the add. If it fails, the album is still added
+/// (recoverable later via the Statistics panel's "no cover" list); the
+/// returned message notes it either way. Mirrors BookNojo's
+/// `commit_add_book` for the same reason.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 fn add_album(
@@ -269,10 +296,21 @@ fn add_album(
     many: ManyToManyInputs,
     fields: AlbumFields,
     tracks: Vec<String>,
-) -> Result<(), String> {
+    cover_path: Option<String>,
+) -> Result<String, String> {
     let conn = open_for_write(&path)?;
-    let plan = build_plan(&conn, &title, &roles, &many, &fields, &tracks).map_err(|e| e.to_string())?;
-    conn.execute_batch(&plan).map_err(|e| e.to_string())
+    let (plan, album_id) = build_plan(&conn, &title, &roles, &many, &fields, &tracks).map_err(|e| e.to_string())?;
+    conn.execute_batch(&plan).map_err(|e| e.to_string())?;
+    let Some(cover_path) = cover_path else {
+        return Ok("Album ajouté.".to_string());
+    };
+    let db_path = resolve_db_path(Path::new(&path));
+    match set_cover(&db_path, album_id, Some(Path::new(&cover_path)), None, false) {
+        Ok(()) => Ok("Album ajouté avec sa couverture.".to_string()),
+        Err(e) => Ok(format!(
+            "Album ajouté, mais la couverture n'a pas pu être enregistrée ({e:#})."
+        )),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -534,6 +572,7 @@ pub fn run() {
             list_albums,
             pick_collection,
             pick_and_set_cover,
+            pick_cover_for_new_album,
             prepare_add_album,
             add_album,
             edit_album,

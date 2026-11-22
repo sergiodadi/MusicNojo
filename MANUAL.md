@@ -57,28 +57,31 @@ compile it from source, see [`BUILD.md`](BUILD.md).
 ## 3. Adding, editing, deleting an album
 
 - **Add an album**: a form covering every field (every role, every
-  many-to-many field, every scalar field, and tracks — one per line).
-  Before anything is written, a preview lists every artist/genre/
-  format/... value that was typed, with a "new" badge on the ones that
-  don't already exist in the collection (catching a typo before it
-  becomes a permanent duplicate entry) — confirming it is what
-  actually adds the album. The new album joins whichever
-  sub-collection tab is currently active, and is stamped with the
-  current date and time as its date added — editing an album never
-  changes this later.
+  many-to-many field, every scalar field, and tracks — one per line),
+  plus an optional cover picker ("Choose an image…") right under the
+  title — pick an image and it's set as the new album's front cover as
+  soon as the album itself is created. Before anything is written, a
+  preview lists every artist/genre/format/... value that was typed,
+  with a "new" badge on the ones that don't already exist in the
+  collection (catching a typo before it becomes a permanent duplicate
+  entry) — confirming it is what actually adds the album. The new
+  album joins whichever sub-collection tab is currently active, and is
+  stamped with the current date and time as its date added — editing
+  an album never changes this later. If the cover can't be saved, the
+  album is still added — a message says so, and the cover can always
+  be set afterwards (see below).
 - **Edit an album**: from its detail card, the same form opens
-  pre-filled with the current values, and writes immediately (no
-  preview step). An album's sub-collection can't be changed this way
-  yet.
+  pre-filled with the current values (no cover picker here — editing
+  keeps the existing cover), and writes immediately (no preview step).
+  An album's sub-collection can't be changed this way yet.
 - **Delete an album**: from its detail card, after a confirmation
   dialog.
 - After any add, edit or delete, the library is automatically
   reloaded: the change appears immediately, with no manual action
   needed.
-- There is no way yet, from the application, to pick which cover to
-  use when *adding* an album — only `set-cover` afterwards (via the
+- To set or replace a cover on an album that already exists, use the
   statistics panel's "no cover" list, or `mc_add set-cover` from the
-  command line) sets one.
+  command line.
 
 ## 4. Bilingual interface
 

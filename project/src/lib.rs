@@ -2338,7 +2338,7 @@ pub fn build_plan(
     many: &ManyToManyInputs,
     fields: &AlbumFields,
     tracks: &[String],
-) -> Result<String> {
+) -> Result<(String, i64)> {
     let mut pks = PkAllocator::new(conn);
     let mut sql: Vec<String> = vec!["BEGIN;".to_string()];
 
@@ -2428,7 +2428,7 @@ pub fn build_plan(
 
     sql.extend(pks.bump_statements());
     sql.push("COMMIT;".to_string());
-    Ok(sql.join("\n"))
+    Ok((sql.join("\n"), album_id))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -22,8 +22,8 @@ let currentCollection = null;
 // instead of leaving some parts translated and others not.
 const I18N = {
   en: {
-    nav_open: "Open Collection…",
-    nav_add: "Add Album…",
+    nav_open: "📂 Open Collection…",
+    nav_add: "➕ Add Album…",
     nav_stats: "📊 Statistics",
     nav_back_to_collection: "← Back to collection",
     search_placeholder: "Search by title or artist…",
@@ -83,6 +83,10 @@ const I18N = {
     form_title_add: "Add Album",
     form_title_edit: "Edit Album",
     form_label_title: "Title",
+    add_cover_label: "Cover (optional)",
+    add_cover_choose: "Choose an image…",
+    add_cover_chosen: "Chosen: {name}",
+    add_cover_remove: "Remove",
     form_label_artists: "Artist(s), comma-separated",
     form_label_composers: "Composer(s)",
     form_label_conductors: "Conductor(s)",
@@ -126,8 +130,8 @@ const I18N = {
     stats_no_data: "No data.",
   },
   fr: {
-    nav_open: "Ouvrir une collection…",
-    nav_add: "Ajouter un album…",
+    nav_open: "📂 Ouvrir une collection…",
+    nav_add: "➕ Ajouter un album…",
     nav_stats: "📊 Statistiques",
     nav_back_to_collection: "← Retour à la collection",
     search_placeholder: "Rechercher par titre ou artiste…",
@@ -187,6 +191,10 @@ const I18N = {
     form_title_add: "Ajouter un album",
     form_title_edit: "Modifier l'album",
     form_label_title: "Titre",
+    add_cover_label: "Couverture (optionnel)",
+    add_cover_choose: "Choisir une image…",
+    add_cover_chosen: "Choisi : {name}",
+    add_cover_remove: "Retirer",
     form_label_artists: "Artiste(s), séparés par des virgules",
     form_label_composers: "Compositeur(s)",
     form_label_conductors: "Chef(s) d'orchestre",
@@ -1020,6 +1028,27 @@ const dialog = document.getElementById("album-form-dialog");
 const form = document.getElementById("album-form");
 const formError = document.getElementById("album-form-error");
 
+// Set by the native picker's 'add-cover-picked' event, read once at
+// add_album invoke time. Add-time only (never set/read while editing —
+// mirrors BookNojo's pendingAddCoverPath).
+let pendingAddCoverPath = null;
+
+function updateAddCoverChosenLabel() {
+  const chosenEl = document.getElementById("addCoverChosen");
+  if (!chosenEl) return;
+  if (!pendingAddCoverPath) {
+    chosenEl.textContent = "";
+    return;
+  }
+  const name = pendingAddCoverPath.split("/").pop();
+  chosenEl.innerHTML = `${escapeHtml(t("add_cover_chosen", { name }))} — <a href="#" id="addCoverRemoveLink">${escapeHtml(t("add_cover_remove"))}</a>`;
+  document.getElementById("addCoverRemoveLink").addEventListener("click", (e) => {
+    e.preventDefault();
+    pendingAddCoverPath = null;
+    updateAddCoverChosenLabel();
+  });
+}
+
 function splitList(value) {
   return value
     .split(",")
@@ -1102,6 +1131,9 @@ function openAddForm() {
   document.getElementById("album-form-title").textContent = t("form_title_add");
   form.dataset.mode = "add";
   formError.textContent = "";
+  pendingAddCoverPath = null;
+  document.getElementById("add-cover-field").hidden = !window.__TAURI__;
+  updateAddCoverChosenLabel();
   dialog.showModal();
 }
 
@@ -1111,6 +1143,8 @@ function openEditForm(a) {
   form.dataset.mode = "edit";
   form.dataset.id = a.id;
   formError.textContent = "";
+  pendingAddCoverPath = null;
+  document.getElementById("add-cover-field").hidden = true;
   form.elements.title.value = a.title;
   form.elements.artists.value = a.artists.join(", ");
   form.elements.composers.value = a.composers.join(", ");
@@ -1135,6 +1169,19 @@ function openEditForm(a) {
 
 document.getElementById("add-album").addEventListener("click", openAddForm);
 document.getElementById("album-form-cancel").addEventListener("click", () => dialog.close());
+
+const addCoverPickBtn = document.getElementById("addCoverPickBtn");
+if (addCoverPickBtn) {
+  addCoverPickBtn.addEventListener("click", () => {
+    invoke("pick_cover_for_new_album");
+  });
+}
+if (window.__TAURI__) {
+  window.__TAURI__.event.listen("add-cover-picked", (event) => {
+    pendingAddCoverPath = event.payload;
+    updateAddCoverChosenLabel();
+  });
+}
 
 document.getElementById("detail-edit").addEventListener("click", () => {
   const a = albums.find((x) => x.id === currentDetailId);
@@ -1234,6 +1281,7 @@ form.addEventListener("submit", async (e) => {
           many,
           fields,
           tracks,
+          coverPath: pendingAddCoverPath,
         });
       }
       dialog.close();

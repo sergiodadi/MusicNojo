@@ -64,27 +64,32 @@ voir [`BUILD.fr.md`](BUILD.fr.md).
 
 - **Ajouter un album** : un formulaire couvrant chaque champ (chaque
   rôle, chaque champ many-to-many, chaque champ scalaire, et les
-  pistes — une par ligne). Avant toute écriture, un aperçu liste
-  chaque valeur saisie (artiste, genre, format...) avec un badge
-  "nouveau" sur celles qui n'existent pas encore dans la collection
-  (pour repérer une faute de frappe avant qu'elle devienne une entrée
-  dupliquée permanente) — c'est la confirmation de cet aperçu qui
-  ajoute réellement l'album. Le nouvel album rejoint l'onglet de
-  sous-collection actif au moment de l'ajout, et reçoit la date et
-  l'heure actuelles comme date d'ajout — modifier l'album par la
-  suite ne change jamais cette date.
+  pistes — une par ligne), avec en plus un sélecteur de pochette
+  optionnel ("Choisir une image…") juste sous le titre — l'image
+  choisie devient la pochette (avant) de l'album dès que celui-ci est
+  créé. Avant toute écriture, un aperçu liste chaque valeur saisie
+  (artiste, genre, format...) avec un badge "nouveau" sur celles qui
+  n'existent pas encore dans la collection (pour repérer une faute de
+  frappe avant qu'elle devienne une entrée dupliquée permanente) —
+  c'est la confirmation de cet aperçu qui ajoute réellement l'album.
+  Le nouvel album rejoint l'onglet de sous-collection actif au moment
+  de l'ajout, et reçoit la date et l'heure actuelles comme date
+  d'ajout — modifier l'album par la suite ne change jamais cette date.
+  Si la pochette ne peut pas être enregistrée, l'album est quand même
+  ajouté — un message le signale, et la pochette reste rattrapable
+  ensuite (voir ci-dessous).
 - **Modifier un album** : depuis sa fiche détail, le même formulaire
-  s'ouvre pré-rempli avec les valeurs actuelles, et écrit
+  s'ouvre pré-rempli avec les valeurs actuelles (sans sélecteur de
+  pochette ici — modifier conserve la pochette existante), et écrit
   immédiatement (pas d'étape d'aperçu). La sous-collection d'un album
   ne peut pas encore être changée de cette façon.
 - **Supprimer un album** : depuis sa fiche détail, après confirmation.
 - Après tout ajout, modification ou suppression, la bibliothèque se
   recharge automatiquement : le changement apparaît immédiatement,
   sans action manuelle nécessaire.
-- Il n'est pas encore possible, depuis l'application, de choisir une
-  pochette au moment de l'*ajout* — seul `set-cover` ensuite (via la
-  liste "sans pochette" du panneau de statistiques, ou
-  `mc_add set-cover` en ligne de commande) en définit une.
+- Pour poser ou remplacer la pochette d'un album déjà existant,
+  utiliser la liste "sans pochette" du panneau de statistiques, ou
+  `mc_add set-cover` en ligne de commande.
 
 ## 4. Interface bilingue
 

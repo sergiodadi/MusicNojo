@@ -655,6 +655,41 @@ dialog::backdrop {
   gap: 0.5rem;
 }
 
+.add-cover-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-cover-field .label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #666;
+}
+
+.add-cover-field button {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.add-cover-field button:hover {
+  background: #f3edff;
+  border-color: #a855f7;
+  color: #5b21b6;
+}
+
+.add-cover-chosen {
+  font-size: 0.82rem;
+  color: #666;
+}
+
 #album-form .row label {
   flex: 1;
 }

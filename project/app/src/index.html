@@ -7,13 +7,13 @@
 </head>
 <body>
   <header>
-    <h1>MusicNojo</h1>
+    <h1>🎵 MusicNojo</h1>
     <input id="search" type="search" data-i18n-placeholder="search_placeholder" placeholder="Search by title or artist…" autofocus />
     <span id="count"></span>
     <span id="file-badge"></span>
     <span id="app-version">MusicNojo</span>
-    <button id="open-collection" data-i18n="nav_open">Open Collection…</button>
-    <button id="add-album" data-i18n="nav_add">Add Album…</button>
+    <button id="open-collection" data-i18n="nav_open">📂 Open Collection…</button>
+    <button id="add-album" data-i18n="nav_add">➕ Add Album…</button>
     <button id="stats-btn" data-i18n="nav_stats">📊 Statistics</button>
   </header>
   <div id="tabs"></div>
@@ -81,6 +81,11 @@
     <form id="album-form" method="dialog">
       <h2 id="album-form-title">Add Album</h2>
       <label><span data-i18n="form_label_title">Title</span> <input name="title" required /></label>
+      <div class="add-cover-field" id="add-cover-field" hidden>
+        <span class="label" data-i18n="add_cover_label">Cover (optional)</span>
+        <button type="button" id="addCoverPickBtn" data-i18n="add_cover_choose">Choose an image…</button>
+        <span id="addCoverChosen" class="add-cover-chosen"></span>
+      </div>
       <label><span data-i18n="form_label_artists">Artist(s), comma-separated</span> <input name="artists" list="dl-artists" /></label>
       <label><span data-i18n="form_label_composers">Composer(s)</span> <input name="composers" list="dl-composers" /></label>
       <label><span data-i18n="form_label_conductors">Conductor(s)</span> <input name="conductors" list="dl-conductors" /></label>

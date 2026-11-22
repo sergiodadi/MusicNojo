@@ -251,8 +251,11 @@ fn main() -> Result<()> {
             out,
         } => {
             let (db_path, conn) = open_readonly_with_path(&db)?;
-            let plan_sql = build_plan(&conn, &title, &roles, &many, &fields, &tracks)?;
+            let (plan_sql, album_id) = build_plan(&conn, &title, &roles, &many, &fields, &tracks)?;
             emit_plan(&plan_sql, out, &db_path)?;
+            println!(
+                "-- ID (Z_PK) prévu pour cet album : {album_id} (utilisable ensuite avec 'set-cover')."
+            );
         }
         Command::EditPlan {
             db,
@@ -470,7 +473,7 @@ mod tests {
             tag: vec!["Tag de test".to_string()],
             ..Default::default()
         };
-        let plan_sql = build_plan(
+        let (plan_sql, _album_id) = build_plan(
             &read_conn,
             "Test unitaire mc_add",
             &roles,
