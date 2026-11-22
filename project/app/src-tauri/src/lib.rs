@@ -440,6 +440,24 @@ mod tests {
     }
 }
 
+/// "MusicNojo Help > User Guide" — opens a real help window (a bundled,
+/// bilingual, self-contained `help.html`: no Tauri API calls from inside
+/// it, so no capability grant needed) instead of the plain name+version
+/// dialog this used to show, which only duplicated the real native About
+/// panel. Reuses the existing window if already open instead of opening
+/// a second one. Same fix as BookNojo's own `show_help_window`.
+fn show_help_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("help") {
+        let _ = win.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(app, "help", tauri::WebviewUrl::App("help.html".into()))
+        .title("MusicNojo Help")
+        .inner_size(680.0, 820.0)
+        .resizable(true)
+        .build();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Native macOS menu bar — same shape as BookNojo's own `build_menu`.
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
@@ -486,9 +504,13 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
 
     // A submenu titled exactly "Help" is swallowed entirely by macOS/
     // Tauri in this Tauri version — "MusicNojo Help" sidesteps it,
-    // same finding/workaround as BookNojo's own menu.
+    // same finding/workaround as BookNojo's own menu. "User Guide" used
+    // to be "About MusicNojo", a bare name+version dialog duplicating
+    // the real native About panel (the app_menu's own `.about(...)`) —
+    // found by Serge comparing the two, same fix as BookNojo's. Now
+    // opens a real help window instead (see show_help_window).
     let help_menu = SubmenuBuilder::new(app, "MusicNojo Help")
-        .text("about_musicnojo", "About MusicNojo")
+        .text("show_help", "User Guide")
         .build()?;
 
     let mut builder = MenuBuilder::new(app);
@@ -524,12 +546,7 @@ pub fn run() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open_collection" => pick_collection(app.clone()),
-            "about_musicnojo" => {
-                app.dialog()
-                    .message(format!("MusicNojo\nVersion {}", DISPLAY_VERSION))
-                    .title("About MusicNojo")
-                    .show(|_| {});
-            }
+            "show_help" => show_help_window(app),
             _ => {}
         })
         .run(tauri::generate_context!())
