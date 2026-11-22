@@ -5,6 +5,12 @@
 Historique des **versions publiées sur GitHub**, une entrée par
 tag/release — même convention que le [CHANGELOG.md de BookNojo](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b7] - 2026-11-22
+
+- Nouvelle icône d'application : un carré plat en dégradé violet avec un
+  monogramme blanc « MN », à la place de l'icône générique par défaut de
+  Tauri utilisée jusqu'ici.
+
 ## [v1.0.0b6] - 2026-11-21
 
 Nouveau `.dmg` (`MusicNojo_1.0.0-b6_aarch64.dmg` — le nom du `.dmg` suit

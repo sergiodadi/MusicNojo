@@ -5,6 +5,11 @@
 History of **versions published on GitHub**, one entry per
 tag/release — same convention as [BookNojo's CHANGELOG.md](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0b7] - 2026-11-22
+
+- New app icon: a flat violet-gradient square with a white "MN" monogram,
+  replacing the generic default Tauri icon used until now.
+
 ## [v1.0.0b6] - 2026-11-21
 
 New `.dmg` (`MusicNojo_1.0.0-b6_aarch64.dmg` — the `.dmg` filename now
