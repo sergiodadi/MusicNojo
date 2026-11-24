@@ -244,7 +244,9 @@ L'objectif à long terme est une base **indépendante** de
 l'application — amorcée une fois depuis la vraie collection (§
 "`mc_add import`"), puis alimentée uniquement par MusicNojo, sans plus
 dépendre de Music Collector pour grandir. L'extension choisie pour
-cette base persistante est **`.mnc`** — elle fonctionne exactement
+cette base persistante est **`.mnj`** (renommée depuis un premier
+choix `.mnc` le 24/11/2026, pour correspondre à la convention de la
+famille — `.bnj` pour BookNojo, `.vnj` pour VideoNojo) — elle fonctionne exactement
 comme un `.mucp` (seule la présence d'un fichier `Music_data` dedans
 compte, jamais le nom du dossier). Pour continuer à alimenter aussi la
 vraie application Music Collector pendant une période de transition,
@@ -257,19 +259,19 @@ divergent dès que les deux bases évoluent indépendamment.
 
 ### `mc_add import` — le transfert de Music Collector vers MusicNojo
 
-Amorce une nouvelle base indépendante `.mnc` à partir d'une collection
+Amorce une nouvelle base indépendante `.mnj` à partir d'une collection
 existante (base + dossier `Images/`). Conçu pour n'être exécuté
 **qu'une seule fois** : refuse d'écraser une destination qui existe
 déjà.
 
 ```bash
 ./mc_add import --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp"
-# -> collection/MyCollection.mnc (destination par défaut)
+# -> collection/MyCollection.mnj (destination par défaut)
 
 # Ou avec une destination explicite :
 ./mc_add import \
   --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp" \
-  --dest ~/MyCollectionMusicNojo.mnc
+  --dest ~/MyCollectionMusicNojo.mnj
 ```
 
 ## 5. Dépannage

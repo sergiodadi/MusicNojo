@@ -101,6 +101,85 @@ pub fn resolve_db_path(path: &Path) -> std::path::PathBuf {
     }
 }
 
+// ------------------------------------------------- Import (bootstrap a .mnj)
+
+/// Result of a successful [`import_collection_to`] call.
+#[derive(Debug)]
+pub struct ImportOutcome {
+    pub dest: PathBuf,
+    pub album_count: i64,
+}
+
+/// Computes the fixed destination for a new `.mnj` database bootstrapped
+/// from `source` via [`import_collection_to`]: always
+/// `~/Documents/MusicNojo/<source file stem>.mnj` — a fixed, automatic
+/// location (no "Save As" dialog), same deliberate choice Serge made for
+/// BookNojo's "Import Collection…" menu. Pure path computation: it does not
+/// create any directory or touch the filesystem itself —
+/// `import_collection_to` creates `dest`'s parent directory when it runs.
+pub fn default_mnj_destination(source: &Path) -> Result<PathBuf> {
+    let home = std::env::var("HOME")
+        .context("variable d'environnement HOME introuvable — impossible de déterminer ~/Documents/MusicNojo")?;
+    let name = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "MyCollection".to_string());
+    Ok(PathBuf::from(home)
+        .join("Documents")
+        .join("MusicNojo")
+        .join(format!("{name}.mnj")))
+}
+
+/// Bootstraps a brand-new, independent collection at `dest` by copying the
+/// whole document package found at `source` (a `.mucp`/`.mnj` path, or a
+/// directory already containing `Music_data`). Meant to run **once** per
+/// new database: refuses outright if `dest` already exists, rather than
+/// ever overwriting one. `source` itself is only ever read, never
+/// modified — this is a plain recursive copy (`cp -R`), not a live link.
+///
+/// Shared by `mc_add import` (the CLI, which pre-checks `dest.exists()`
+/// itself first, to show its own message) and MusicNojo's "File > Import
+/// Collection…" menu (which has no CLI-style message of its own to
+/// preserve, and relies on this function's own checks). Mirrors BookNojo's
+/// `import_collection_to` exactly — same plan, applied to this app.
+pub fn import_collection_to(source: &Path, dest: &Path) -> Result<ImportOutcome> {
+    let source_db = resolve_db_path(source);
+    let source_pkg = source_db
+        .parent()
+        .context("dossier source introuvable (attendu : un .mucp/.mnj contenant Music_data)")?;
+
+    if dest.exists() {
+        bail!(
+            "{} existe déjà — l'import ne sert qu'à amorcer une nouvelle base, une seule \
+             fois, pour ne jamais en écraser une existante.",
+            dest.display()
+        );
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("création de {}", parent.display()))?;
+    }
+
+    let status = std::process::Command::new("cp")
+        .args(["-R", &source_pkg.to_string_lossy(), &dest.to_string_lossy()])
+        .status()
+        .context("exécution de cp -R")?;
+    if !status.success() {
+        bail!("échec de la copie (cp -R)");
+    }
+    std::process::Command::new("chmod")
+        .args(["-R", "u+w", &dest.to_string_lossy()])
+        .status()
+        .context("exécution de chmod -R u+w")?;
+
+    let dest_music_data = dest.join("Music_data");
+    let conn = Connection::open_with_flags(&dest_music_data, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture de {}", dest_music_data.display()))?;
+    let album_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_ENT = ?1", [ENT_ALBUM], |row| row.get(0))?;
+
+    Ok(ImportOutcome { dest: dest.to_path_buf(), album_count })
+}
+
 /// Bulk-loaded lookups, keyed so that assembling each album is a set of
 /// in-memory map lookups instead of running fresh SQL per album (an
 /// earlier version ran ~20 small queries per album — ~45,000 total for
@@ -2574,6 +2653,122 @@ pub fn build_delete_plan(conn: &Connection, album_id: i64) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // `HOME` is process-global; tests run on separate threads by default,
+    // so any test mutating it must hold this lock for its whole duration
+    // (same precaution BookNojo's own equivalent test needed after a real
+    // race was caught there — see that project's `HOME_ENV_LOCK`).
+    static HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn temp_root(test_name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("mc_export_it_{test_name}_{}_{nanos}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn default_mnj_destination_uses_the_fixed_documents_musicnojo_folder() {
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", "/tmp/mc_export_test_home");
+
+        assert_eq!(
+            default_mnj_destination(Path::new("/Users/x/Documents/Collectorz/Music Collector/MyCollection.mucp"))
+                .unwrap(),
+            PathBuf::from("/tmp/mc_export_test_home/Documents/MusicNojo/MyCollection.mnj")
+        );
+
+        match original_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    fn default_mnj_destination_fails_clearly_without_home() {
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let original_home = std::env::var("HOME").ok();
+        std::env::remove_var("HOME");
+
+        let err = default_mnj_destination(Path::new("MyCollection.mucp")).unwrap_err();
+        assert!(err.to_string().contains("HOME"));
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        }
+    }
+
+    /// Uses the committed `sample-collection/` fixture (unlike
+    /// `testdata/`, gitignored/personal — see this file's other test)
+    /// so this one always runs, anywhere this repo is cloned.
+    #[test]
+    fn import_collection_to_copies_the_whole_package_and_counts_albums() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-collection/MyCollection.mucp");
+        let root = temp_root("import_collection_to_copy");
+        let dest = root.join("Imported.mnj");
+
+        let outcome = import_collection_to(&source, &dest).expect("import_collection_to");
+
+        assert_eq!(outcome.dest, dest);
+        assert_eq!(outcome.album_count, 12);
+        assert!(dest.join("Music_data").is_file(), "Music_data should have been copied");
+        assert!(dest.join("Images").is_dir(), "Images/ should have been copied");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn import_collection_to_refuses_to_overwrite_an_existing_destination() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("sample-collection/MyCollection.mucp");
+        let root = temp_root("import_collection_to_no_overwrite");
+        let dest = root.join("AlreadyThere.mnj");
+        std::fs::create_dir_all(&dest).expect("pre-create destination");
+
+        let err = import_collection_to(&source, &dest).expect_err("should refuse an existing destination");
+        assert!(err.to_string().contains("existe déjà"), "unexpected error message: {err}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Replays, outside of any dialog callback, the full chain "File >
+    /// Import Collection…" runs once a `.mucp` has been picked:
+    /// `default_mnj_destination` then `import_collection_to`, against the
+    /// real personal `testdata/` fixture (which — unlike `sample-collection/`
+    /// — has a real `preferences.plist`, matching what a real Music
+    /// Collector export looks like). Gitignored/personal, like this file's
+    /// other `testdata/`-dependent test — skipped where absent.
+    #[test]
+    fn the_full_import_chain_bootstraps_an_mnj_at_the_fixed_destination() {
+        let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/MyCollection.mucp");
+        if !source.exists() {
+            eprintln!("testdata/MyCollection.mucp absent (copie personnelle, non committée) — test ignoré");
+            return;
+        }
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let fake_home = std::env::temp_dir().join("musicnojo_full_import_chain_test_home");
+        let _ = std::fs::remove_dir_all(&fake_home);
+        std::fs::create_dir_all(&fake_home).unwrap();
+        let previous_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &fake_home);
+
+        let dest = default_mnj_destination(&source).expect("dest computation must succeed");
+        assert_eq!(dest, fake_home.join("Documents/MusicNojo/MyCollection.mnj"));
+
+        let outcome = import_collection_to(&source, &dest).expect("import must succeed");
+        assert!(dest.join("Music_data").is_file());
+        assert!(dest.join("Images").is_dir());
+        assert!(outcome.album_count > 0);
+
+        match previous_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+        let _ = std::fs::remove_dir_all(&fake_home);
+    }
 
     #[test]
     fn exports_against_local_test_copy_if_present() {

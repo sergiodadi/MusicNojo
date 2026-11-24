@@ -4,11 +4,11 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use music_collector_export::{
     backup_database, build_delete_plan, build_edit_plan, build_plan, ensure_not_real_collection,
-    is_music_collector_running, looks_like_real_collection, open_readonly, resolve_db_path,
-    set_cover, AlbumFields, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
-    ENT_ALBUM,
+    import_collection_to, is_music_collector_running, looks_like_real_collection, open_readonly,
+    resolve_db_path, set_cover, AlbumFields, ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs,
+    RoleReplaceFlags,
 };
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::Connection;
 
 #[derive(Parser)]
 struct Args {
@@ -104,18 +104,21 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Bootstraps a new, independent ".mnc" database from an existing
+    /// Bootstraps a new, independent ".mnj" database from an existing
     /// collection (database + Images/ folder) — a one-time copy, never
     /// re-run against a destination that already exists. The result
     /// works exactly like a .mucp (same schema, just a different
     /// extension to mark it as MusicNojo's own going forward, not
     /// Music Collector's) — see CLI.md § "Why an independent database".
+    /// (Renamed from an initial ".mnc" pick on 24/11/2026 — ".mnj"
+    /// matches the family naming BookNojo's own ".bnj"/VideoNojo's
+    /// ".vnj" settled on.)
     Import {
         /// The existing .mucp (or any other extension — only the
         /// presence of Music_data inside matters) to copy from.
         #[arg(long)]
         source: PathBuf,
-        /// Defaults to "collection/<source name>.mnc" in the current directory.
+        /// Defaults to "collection/<source name>.mnj" in the current directory.
         #[arg(long)]
         dest: Option<PathBuf>,
     },
@@ -176,23 +179,24 @@ fn emit_plan(plan_sql: &str, out: Option<PathBuf>, db_path: &Path) -> Result<()>
 }
 
 /// Default destination when `--dest` is omitted: `collection/<source
-/// basename>.mnc` in the current directory — `.mnc` is the chosen
+/// basename>.mnj` in the current directory — `.mnj` is the chosen
 /// extension for the new, independent "MusicNojo" database going
-/// forward, same convention as BookNojo's own `.col`.
+/// forward (renamed from an initial `.mnc` pick, see the `Import`
+/// variant's own doc comment).
 fn default_import_dest(source: &Path) -> PathBuf {
     let name = source
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "MyCollection".to_string());
-    PathBuf::from("collection").join(format!("{name}.mnc"))
+    PathBuf::from("collection").join(format!("{name}.mnj"))
 }
 
+/// Pre-checks `dest.exists()` itself first (rather than relying only on
+/// the shared `import_collection_to`'s own check) to show its own
+/// message with the `--dest` hint — same split BookNojo's `bc_add
+/// import` keeps between its CLI message and the shared function's
+/// plain French safety net for other callers (like MusicNojo's GUI).
 fn cmd_import(source: PathBuf, dest: Option<PathBuf>) -> Result<()> {
-    let source_db = resolve_db_path(&source);
-    let source_pkg = source_db
-        .parent()
-        .context("dossier source introuvable (attendu : un .mucp contenant Music_data)")?;
-
     let dest = dest.unwrap_or_else(|| default_import_dest(&source));
     if dest.exists() {
         bail!(
@@ -202,31 +206,10 @@ fn cmd_import(source: PathBuf, dest: Option<PathBuf>) -> Result<()> {
             dest.display()
         );
     }
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("création de {}", parent.display()))?;
-    }
 
-    println!("Import de {} vers {}...", source_pkg.display(), dest.display());
-    let status = std::process::Command::new("cp")
-        .args(["-R", &source_pkg.to_string_lossy(), &dest.to_string_lossy()])
-        .status()
-        .context("exécution de cp -R")?;
-    if !status.success() {
-        bail!("échec de la copie (cp -R)");
-    }
-    std::process::Command::new("chmod")
-        .args(["-R", "u+w", &dest.to_string_lossy()])
-        .status()
-        .context("exécution de chmod -R u+w")?;
-
-    let dest_music_data = dest.join("Music_data");
-    let conn = Connection::open_with_flags(&dest_music_data, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .with_context(|| format!("ouverture de {}", dest_music_data.display()))?;
-    let album_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_ENT = ?1",
-        [ENT_ALBUM],
-        |row| row.get(0),
-    )?;
+    println!("Import de {} vers {}...", source.display(), dest.display());
+    let outcome = import_collection_to(&source, &dest)?;
+    let album_count = outcome.album_count;
 
     println!();
     println!("✅ Import terminé : {album_count} album(s) dans {}.", dest.display());
@@ -360,16 +343,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_import_dest_uses_the_mnc_extension_under_collection() {
+    fn default_import_dest_uses_the_mnj_extension_under_collection() {
         assert_eq!(
             default_import_dest(Path::new(
                 "/Users/x/Documents/Collectorz/Music Collector/MyCollection.mucp"
             )),
-            PathBuf::from("collection/MyCollection.mnc")
+            PathBuf::from("collection/MyCollection.mnj")
         );
         assert_eq!(
-            default_import_dest(Path::new("Already.mnc")),
-            PathBuf::from("collection/Already.mnc")
+            default_import_dest(Path::new("Already.mnj")),
+            PathBuf::from("collection/Already.mnj")
         );
     }
 

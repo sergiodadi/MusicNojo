@@ -6,6 +6,7 @@ use music_collector_export::{
     resolve_db_path, set_cover, AddAlbumPreview, Album, AlbumFields, Connection,
     ManyToManyInputs, ManyToManyReplaceFlags, RoleInputs, RoleReplaceFlags,
 };
+use serde::Serialize;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
@@ -132,69 +133,128 @@ fn list_albums(app: tauri::AppHandle, path: Option<String>) -> Result<AlbumsResp
     })
 }
 
-/// Native picker for a .mucp package. Uses the dialog plugin's async
-/// callback form, not `blocking_pick_file()` — that one blocks the
-/// calling thread waiting on the native panel, which on macOS must run
-/// on the main thread; called from a Tauri command (off the main
-/// thread) this deadlocks instead of returning (observed: the window
-/// never regains control, spinning cursor). The chosen path is sent to
-/// the frontend as a "collection-picked" event, since the picker itself
-/// is asynchronous — same pattern as BookNojo's own import dialog.
-///
-/// `pick_file`, not `pick_folder`: macOS's Launch Services knows `.mucp`
-/// is a package (registered by Music Collector.app itself) and
-/// NSOpenPanel treats a recognized package as a *file*, not a folder —
-/// a folder-only picker (`canChooseFiles: false`, what `pick_folder`
-/// sets) grays it out entirely (user-reported: "MyCollection.mucp ...
-/// c'est grisé"). `pick_file` with an extension filter lets the package
-/// be selected as a single atomic item, matching how Finder normally
-/// handles package-style bundles — same fix BookNojo already uses for
-/// its own `.bkcp` picker.
+/// Header button "Open Collection…" — opens the native macOS file picker,
+/// restricted to an already-imported `.mnj` (mirrors BookNojo's own
+/// Import/Open split, étapes 1-8 of its "base persistante interne" plan,
+/// applied here 24/11/2026: a real Music Collector `.mucp` is now only
+/// ever a one-shot *source* for "File > Import Collection…", never opened
+/// directly here — see `open_import_collection_dialog`). Uses the dialog
+/// plugin's async callback form, not `blocking_pick_file()` — that one
+/// blocks the calling thread waiting on the native panel, which on macOS
+/// must run on the main thread; called from a Tauri command (off the main
+/// thread) this deadlocks instead of returning. `pick_file`, not
+/// `pick_folder`: `pick_file` with an extension filter lets a `.mnj`
+/// package be selected as a single atomic item rather than navigated
+/// into, the same way it already did for `.mucp` before this split (no
+/// declared macOS document type needed for this — same finding BookNojo's
+/// own rename from `.col` made explicit). No Music Collector version
+/// check needed any more on this path — that only ever applied to a raw
+/// `.mucp`, which this picker can no longer select at all. There is no
+/// native file-picker API to show a conditional "empty folder" hint, so
+/// the dialog's own title doubles as the help message when no `.mnj`
+/// exists yet — shown every time, not just when it's actually empty.
 #[tauri::command]
 fn pick_collection(app: tauri::AppHandle) {
     app.dialog()
         .file()
-        .set_title("Open a Music Collector collection (.mucp)")
-        .add_filter("Collection", &["mucp"])
+        .set_title("Open a MusicNojo collection (.mnj) — no .mnj yet? Use File > Import Collection… first")
+        .add_filter("MusicNojo collection", &["mnj"])
         .pick_file(move |file| {
             let Some(file) = file else { return };
-            let Some(local_path) = file.as_path() else {
-                let _ = app.emit("collection-picked", file.to_string());
-                return;
-            };
+            let _ = app.emit("collection-picked", file.to_string());
+        });
+}
 
-            // Only a path picked here goes through this — the bundled
-            // sample-collection (no preferences.plist at all) is loaded
-            // through a different path at boot and never hits this
-            // check, same split BookNojo's own import dialog has.
-            match mucp_version(local_path) {
+/// Payload for the `collection-imported` event — a brand-new `.mnj` was
+/// just bootstrapped from a `.mucp` (see `open_import_collection_dialog`).
+/// `album_count` lets the frontend show an import summary without a
+/// second round trip to count anything itself.
+#[derive(Serialize, Clone)]
+struct CollectionImported {
+    path: String,
+    album_count: i64,
+}
+
+/// Small one-button error dialog, factored out because
+/// `open_import_collection_dialog` below has three distinct failure
+/// points (unsupported/unverifiable Music Collector version, destination
+/// already existing, the copy itself failing) that would otherwise
+/// repeat the same `app.dialog()....show(|_| {})` boilerplate three
+/// times. Mirrors BookNojo's own `show_error_dialog`.
+fn show_error_dialog(app: &tauri::AppHandle, title: &str, message: impl Into<String>) {
+    app.dialog().message(message.into()).title(title).kind(MessageDialogKind::Error).show(|_| {});
+}
+
+/// "File > Import Collection…" — the native macOS menu's own entry
+/// point (deliberately *not* in the app's own header/menu: imports are
+/// rare, a native-menu-only place suits them, per Serge — same choice as
+/// BookNojo). Distinct from "Open Collection…" (the header button,
+/// `pick_collection`): Import only ever takes a real Music Collector
+/// `.mucp` as source — the picker is filtered accordingly (no `.mnj`
+/// here; re-importing an already-MusicNojo database makes no sense) —
+/// checks its Music Collector version exactly like the combined picker
+/// used to, then bootstraps a brand-new, independent `.mnj` at the fixed
+/// location `default_mnj_destination` computes
+/// (`~/Documents/MusicNojo/<name>.mnj`) via the shared
+/// `import_collection_to`. The source `.mucp` is only ever read — this
+/// is a one-shot copy, never a live link.
+fn open_import_collection_dialog(app: &tauri::AppHandle) {
+    let app_handle = app.clone();
+    app.dialog()
+        .file()
+        .set_title("Import a Music Collector collection (.mucp)")
+        .add_filter("Music Collector collection", &["mucp"])
+        .pick_file(move |file| {
+            let Some(path) = file else { return };
+            let Some(source) = path.as_path() else { return };
+
+            match mucp_version(source) {
                 Some(version) if version == SUPPORTED_MUCP_VERSION => {}
                 Some(version) => {
-                    app.dialog()
-                        .message(format!(
+                    show_error_dialog(
+                        &app_handle,
+                        "Version non prise en charge",
+                        format!(
                             "Cette collection a été créée avec Music Collector {version}. \
-                             Seule la version {SUPPORTED_MUCP_VERSION} est prise en charge — \
-                             ouverture annulée."
-                        ))
-                        .title("Version non prise en charge")
-                        .kind(MessageDialogKind::Error)
-                        .show(|_| {});
+                             Seule la version {SUPPORTED_MUCP_VERSION} est prise en charge \
+                             pour l'import — import annulé."
+                        ),
+                    );
                     return;
                 }
                 None => {
-                    app.dialog()
-                        .message(
-                            "Impossible de déterminer la version de Music Collector utilisée \
-                             pour cette collection — ouverture annulée par précaution.",
-                        )
-                        .title("Version non vérifiable")
-                        .kind(MessageDialogKind::Error)
-                        .show(|_| {});
+                    show_error_dialog(
+                        &app_handle,
+                        "Version non vérifiable",
+                        "Impossible de déterminer la version de Music Collector utilisée \
+                         pour cette collection — import annulé par précaution.",
+                    );
                     return;
                 }
             }
 
-            let _ = app.emit("collection-picked", file.to_string());
+            let dest = match music_collector_export::default_mnj_destination(source) {
+                Ok(dest) => dest,
+                Err(e) => {
+                    show_error_dialog(&app_handle, "Import impossible", format!("{e:#}"));
+                    return;
+                }
+            };
+
+            match music_collector_export::import_collection_to(source, &dest) {
+                Ok(outcome) => {
+                    let _ = app_handle.emit(
+                        "collection-imported",
+                        CollectionImported {
+                            path: outcome.dest.to_string_lossy().to_string(),
+                            album_count: outcome.album_count,
+                        },
+                    );
+                }
+                Err(e) => {
+                    show_error_dialog(&app_handle, "Import impossible", format!("{e:#}"));
+                }
+            }
         });
 }
 
@@ -353,11 +413,74 @@ mod tests {
 
     /// The bundled sample-collection has no preferences.plist at all
     /// (it was never written by the real Music Collector app) — this
-    /// is exactly why the version check lives in `pick_collection`
-    /// only, never on the path the sample-collection loads through.
+    /// is exactly why the version check lives in
+    /// `open_import_collection_dialog` only, never on the path the
+    /// sample-collection loads through.
     #[test]
     fn mucp_version_is_none_without_a_preferences_plist() {
         assert_eq!(mucp_version(&sample_collection_path()), None);
+    }
+
+    /// `default_mnj_destination` reads the global `HOME` env var — any
+    /// test mutating it must serialize against every other test doing
+    /// the same, in this crate's own test binary (same precaution
+    /// BookNojo's own equivalent test needed after a real race was
+    /// caught there — see that project's `HOME_ENV_LOCK`).
+    static HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn testdata_mucp() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/MyCollection.mucp")
+    }
+
+    /// `testdata/` is gitignored/personal (unlike `sample-collection/`) —
+    /// skipped where absent, same convention the shared crate's own
+    /// `testdata`-dependent tests already use.
+    #[test]
+    fn mucp_version_reads_the_supported_version_from_the_real_fixture() {
+        let source = testdata_mucp();
+        if !source.exists() {
+            eprintln!("testdata/MyCollection.mucp absent (copie personnelle, non committée) — test ignoré");
+            return;
+        }
+        assert_eq!(mucp_version(&source), Some(SUPPORTED_MUCP_VERSION.to_string()));
+    }
+
+    /// Replays, outside of any dialog callback, exactly the sequence
+    /// "File > Import Collection…" runs once a `.mucp` has been picked
+    /// (`open_import_collection_dialog`'s body): version check, then
+    /// `default_mnj_destination`, then `import_collection_to`. The
+    /// dialog itself (native file picker) can't be driven from a test —
+    /// mirrors BookNojo's own equivalent test exactly.
+    #[test]
+    fn the_full_import_chain_bootstraps_an_mnj_at_the_fixed_destination() {
+        let source = testdata_mucp();
+        if !source.exists() {
+            eprintln!("testdata/MyCollection.mucp absent (copie personnelle, non committée) — test ignoré");
+            return;
+        }
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let fake_home = std::env::temp_dir().join("musicnojo_full_import_chain_test_home");
+        let _ = std::fs::remove_dir_all(&fake_home);
+        std::fs::create_dir_all(&fake_home).unwrap();
+        let previous_home = std::env::var("HOME").ok();
+        unsafe { std::env::set_var("HOME", &fake_home) };
+
+        let version = mucp_version(&source);
+        assert_eq!(version, Some(SUPPORTED_MUCP_VERSION.to_string()), "fixture must still match the supported version");
+
+        let dest = music_collector_export::default_mnj_destination(&source).expect("dest computation must succeed");
+        assert_eq!(dest, fake_home.join("Documents/MusicNojo/MyCollection.mnj"));
+
+        let outcome = music_collector_export::import_collection_to(&source, &dest).expect("import must succeed");
+        assert!(outcome.album_count > 0);
+        assert!(dest.join("Music_data").is_file());
+        assert!(dest.join("Images").is_dir());
+
+        match previous_home {
+            Some(home) => unsafe { std::env::set_var("HOME", home) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+        let _ = std::fs::remove_dir_all(&fake_home);
     }
 
     fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
@@ -435,6 +558,7 @@ mod tests {
             many,
             fields,
             vec!["Track One".to_string()],
+            None,
         )
         .unwrap();
 
@@ -519,7 +643,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
-        .text("open_collection", "Open Collection…")
+        .text("import_collection", "Import Collection…")
         .separator()
         .close_window()
         .build()?;
@@ -584,7 +708,7 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open_collection" => pick_collection(app.clone()),
+            "import_collection" => open_import_collection_dialog(app),
             "show_help" => show_help_window(app),
             _ => {}
         })

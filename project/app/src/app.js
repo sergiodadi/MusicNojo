@@ -80,6 +80,7 @@ const I18N = {
     delete_confirm: 'Delete "{title}"? This cannot be undone (a backup is made first).',
     delete_failed: "Delete failed: {err}",
     cover_set_failed: "Setting the cover failed: {err}",
+    import_collection_success: "Import complete: {n} album(s) — opening the new MusicNojo collection.",
     form_title_add: "Add Album",
     form_title_edit: "Edit Album",
     form_label_title: "Title",
@@ -188,6 +189,7 @@ const I18N = {
     delete_confirm: 'Supprimer « {title} » ? Cette action est irréversible (une sauvegarde est faite au préalable).',
     delete_failed: "Échec de la suppression : {err}",
     cover_set_failed: "Échec de la mise à jour de la pochette : {err}",
+    import_collection_success: "Import terminé : {n} album(s) — ouverture de la nouvelle collection MusicNojo.",
     form_title_add: "Ajouter un album",
     form_title_edit: "Modifier l'album",
     form_label_title: "Titre",
@@ -848,6 +850,17 @@ async function loadCollection(path) {
 
 window.__TAURI__.event.listen("collection-picked", (event) => {
   loadCollection(event.payload);
+});
+
+// "File > Import Collection…" (native macOS menu only — rare, one-time
+// action, mirrors BookNojo's own split): the Rust side already
+// bootstrapped a brand-new .mnj on disk (app/src-tauri's
+// open_import_collection_dialog) before sending this — unlike
+// 'collection-picked' above, this always means a *new* database was
+// just created, so it gets its own confirmation message before loading.
+window.__TAURI__.event.listen("collection-imported", (event) => {
+  alert(t("import_collection_success", { n: event.payload.album_count }));
+  loadCollection(event.payload.path);
 });
 
 document.getElementById("open-collection").addEventListener("click", () => {

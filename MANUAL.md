@@ -6,14 +6,26 @@ This document explains how to use the macOS **MusicNojo** application
 once installed. To download it, see [`README.md`](README.md); to
 compile it from source, see [`BUILD.md`](BUILD.md).
 
-## 1. Opening a collection
+## 1. Importing and opening a collection
 
-- **"Open Collection…"** (in the header, or File → Open Collection…
-  in the menu bar) opens the native macOS file picker to choose a
-  `.mucp` collection. The picker only accepts `.mucp` files.
-- A `.mucp` collection from a Music Collector version other than the
-  one MusicNojo was built against (20.3.2) is rejected at this point,
-  with a clear message rather than a crash or silent corruption.
+MusicNojo keeps its own independent copy of your collection, never your
+original Music Collector database — two separate actions:
+
+- **"File > Import Collection…"** — in the macOS menu bar only (a rare,
+  one-time action, not in the app's own header). Choose a real Music
+  Collector `.mucp` collection; MusicNojo copies it once into a
+  brand-new, independent `.mnj` database at a fixed location
+  (`~/Documents/MusicNojo/<name>.mnj`), then opens it automatically.
+  The original `.mucp` is only ever read, never modified. A `.mucp`
+  from a Music Collector version other than the one MusicNojo was
+  built against (20.3.2) is rejected, with a clear message rather
+  than a crash or silent corruption. Importing again into the same
+  destination is refused — it never overwrites an existing `.mnj`.
+- **"📂 Open Collection…"** button in the header (same as **File >
+  Open Collection…**) — the everyday action. Opens the native macOS
+  file picker to choose an already-imported `.mnj`; a raw `.mucp` can
+  no longer be selected here. If no `.mnj` exists yet, the picker's
+  own title says so and points to **File > Import Collection…** first.
 - On the very first launch, before opening anything, MusicNojo shows
   an entirely fictional bundled sample collection (12 invented albums,
   no personal data) — so there's always something to see, without ever

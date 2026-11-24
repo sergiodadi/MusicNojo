@@ -92,15 +92,32 @@
 
     <div data-lang-content="fr">
       <section class="card">
-        <h2>📂 Ouvrir une collection</h2>
-        <p><b>« Ouvrir une collection… »</b> (dans l'en-tête, ou Fichier
-        → Ouvrir une collection… dans la barre de menus) ouvre le
-        sélecteur natif macOS — il n'accepte que les fichiers
-        <code>.mucp</code>.</p>
+        <h2>📂 Importer puis ouvrir une collection</h2>
+        <p>MusicNojo garde sa propre copie indépendante de votre
+        collection, jamais votre base Music Collector d'origine — deux
+        actions distinctes.</p>
         <ul>
-          <li>Une collection <code>.mucp</code> d'une version de Music
-          Collector différente de celle visée (20.3.2) est refusée avec
-          un message clair, plutôt qu'un plantage.</li>
+          <li><b>« File → Import Collection… »</b>, uniquement dans la
+          barre de menu macOS (action rare, à faire une seule fois, pas
+          dans l'en-tête de l'app) : choisissez une vraie collection
+          <code>.mucp</code> Music Collector, MusicNojo la copie une
+          seule fois dans une nouvelle base <code>.mnj</code>
+          indépendante, à un emplacement fixe
+          (<code>~/Documents/MusicNojo/&lt;nom&gt;.mnj</code>), puis
+          l'ouvre automatiquement. Le <code>.mucp</code> d'origine
+          n'est jamais modifié, seulement lu. Une collection
+          <code>.mucp</code> d'une version de Music Collector
+          différente de celle visée (20.3.2) est refusée avec un
+          message clair. Importer à nouveau vers la même destination
+          est refusé — ça n'écrase jamais un <code>.mnj</code>
+          existant.</li>
+          <li>Bouton <b>« 📂 Ouvrir une collection… »</b> dans l'en-tête
+          (identique à <b>File → Open Collection…</b>) : l'action du
+          quotidien, ouvre le sélecteur natif macOS pour choisir un
+          <code>.mnj</code> déjà importé — un <code>.mucp</code> brut
+          ne peut plus être sélectionné ici. Si aucun <code>.mnj</code>
+          n'existe encore, le titre du sélecteur le signale et renvoie
+          vers <b>File → Import Collection…</b>.</li>
           <li>Au tout premier lancement, MusicNojo affiche une collection
           d'exemple intégrée, entièrement fictive (12 albums inventés) —
           il y a toujours quelque chose à voir, sans jamais exposer de
@@ -210,14 +227,30 @@
 
     <div data-lang-content="en">
       <section class="card">
-        <h2>📂 Opening a collection</h2>
-        <p><b>"Open Collection…"</b> (in the header, or File → Open
-        Collection… in the menu bar) opens the native macOS file picker
-        — it only accepts <code>.mucp</code> files.</p>
+        <h2>📂 Importing and opening a collection</h2>
+        <p>MusicNojo keeps its own independent copy of your collection,
+        never your original Music Collector database — two separate
+        actions.</p>
         <ul>
-          <li>A <code>.mucp</code> collection from a Music Collector
-          version other than the one targeted (20.3.2) is rejected with
-          a clear message, rather than a crash.</li>
+          <li><b>"File → Import Collection…"</b>, in the macOS menu bar
+          only (a rare, one-time action, not in the app's own header):
+          choose a real Music Collector <code>.mucp</code> collection,
+          MusicNojo copies it once into a brand-new, independent
+          <code>.mnj</code> database at a fixed location
+          (<code>~/Documents/MusicNojo/&lt;name&gt;.mnj</code>), then
+          opens it automatically. The original <code>.mucp</code> is
+          only ever read, never modified. A <code>.mucp</code> from a
+          different Music Collector version than the one targeted
+          (20.3.2) is rejected with a clear message. Importing again
+          into the same destination is refused — it never overwrites
+          an existing <code>.mnj</code>.</li>
+          <li><b>"📂 Open Collection…"</b> button in the header (same as
+          <b>File → Open Collection…</b>): the everyday action, opens
+          the native macOS file picker to choose an already-imported
+          <code>.mnj</code> — a raw <code>.mucp</code> can no longer be
+          selected here. If no <code>.mnj</code> exists yet, the
+          picker's own title says so and points to <b>File → Import
+          Collection…</b>.</li>
           <li>On the very first launch, MusicNojo shows an entirely
           fictional bundled sample collection (12 invented albums) —
           there's always something to see, without ever exposing real

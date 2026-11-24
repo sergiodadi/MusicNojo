@@ -236,7 +236,9 @@ The long-term goal is a database **independent** from the
 application — bootstrapped once from the real collection (§ "`mc_add
 import`"), then fed only by MusicNojo, never depending on Music
 Collector to keep growing. The chosen extension for this persistent
-database is **`.mnc`** — it works exactly like a `.mucp` (only the
+database is **`.mnj`** (renamed from an initial `.mnc` pick on
+24/11/2026, to match the family naming BookNojo's `.bnj`/VideoNojo's
+`.vnj` settled on) — it works exactly like a `.mucp` (only the
 presence of a `Music_data` file inside matters, never the folder's
 name). To keep feeding the real Music Collector application too
 during a transition period, run the same `add-plan`/`edit-plan`/
@@ -248,18 +250,18 @@ diverge as soon as two databases evolve independently.
 
 ### `mc_add import` — the Music Collector to MusicNojo transfer
 
-Bootstraps a new independent `.mnc` database from an existing
+Bootstraps a new independent `.mnj` database from an existing
 collection (database + `Images/` folder). Only meant to be run
 **once**: refuses to overwrite a destination that already exists.
 
 ```bash
 ./mc_add import --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp"
-# -> collection/MyCollection.mnc (default destination)
+# -> collection/MyCollection.mnj (default destination)
 
 # Or with an explicit destination:
 ./mc_add import \
   --source "~/Documents/Collectorz/Music Collector/MyCollection.mucp" \
-  --dest ~/MyCollectionMusicNojo.mnc
+  --dest ~/MyCollectionMusicNojo.mnj
 ```
 
 ## 5. Troubleshooting
