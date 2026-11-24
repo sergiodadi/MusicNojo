@@ -91,9 +91,11 @@ original Music Collector database — two separate actions:
 - After any add, edit or delete, the library is automatically
   reloaded: the change appears immediately, with no manual action
   needed.
-- To set or replace a cover on an album that already exists, use the
-  statistics panel's "no cover" list, or `mc_add set-cover` from the
-  command line.
+- To set a cover on an album that doesn't have one, use the statistics
+  panel's "no cover" list. It's not yet possible to replace a cover on
+  an album that already has one, or to set the back cover, from the
+  application (`mc_add set-cover` can do both; see
+  [`CLI.md`](CLI.md)).
 
 ## 4. Bilingual interface
 

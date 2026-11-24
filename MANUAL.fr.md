@@ -99,9 +99,11 @@ jamais votre base Music Collector d'origine — deux actions distinctes :
 - Après tout ajout, modification ou suppression, la bibliothèque se
   recharge automatiquement : le changement apparaît immédiatement,
   sans action manuelle nécessaire.
-- Pour poser ou remplacer la pochette d'un album déjà existant,
-  utiliser la liste "sans pochette" du panneau de statistiques, ou
-  `mc_add set-cover` en ligne de commande.
+- Pour poser la pochette d'un album qui n'en a pas, utiliser la liste
+  "sans pochette" du panneau de statistiques. Il n'est pas encore
+  possible de remplacer la pochette d'un album qui en a déjà une, ni
+  de définir la pochette arrière, depuis l'application (`mc_add
+  set-cover` peut faire les deux ; voir [`CLI.fr.md`](CLI.fr.md)).
 
 ## 4. Interface bilingue
 
