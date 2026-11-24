@@ -82,6 +82,15 @@ original Music Collector database — two separate actions:
   an album never changes this later. If the cover can't be saved, the
   album is still added — a message says so, and the cover can always
   be set afterwards (see below).
+  The add form opens on a **"✍️ Manually" / "🔍 Online search"**
+  toggle. The online-search panel searches by title or artist, queries
+  3 free sources at once (iTunes, MusicBrainz, Deezer — never merged
+  across sources, each result keeps its source visible), and picking a
+  result switches back to the manual form with the title, artist,
+  label and year already filled in (iTunes and Deezer also provide a
+  cover, downloaded automatically; MusicBrainz doesn't) — review and
+  complete it before submitting, nothing is written until the form
+  itself is submitted.
 - **Edit an album**: from its detail card, the same form opens
   pre-filled with the current values (no cover picker here — editing
   keeps the existing cover), and writes immediately (no preview step).
@@ -128,8 +137,8 @@ original Music Collector database — two separate actions:
 
 - Changing an album's sub-collection on *edit* (only *add* sets one,
   from whichever tab is active).
-- Online lookup to pre-fill a record from a barcode/UPC or a Discogs/
-  MusicBrainz match — not started.
+- Online lookup by barcode/UPC — the online search feature (section 3)
+  searches by title/artist, not yet by barcode.
 - Not yet code-signed/notarized with an Apple developer account — no
   consequence for personal use, but needed before distributing the
   application to anyone else.

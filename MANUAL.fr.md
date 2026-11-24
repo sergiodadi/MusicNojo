@@ -90,6 +90,16 @@ jamais votre base Music Collector d'origine — deux actions distinctes :
   Si la pochette ne peut pas être enregistrée, l'album est quand même
   ajouté — un message le signale, et la pochette reste rattrapable
   ensuite (voir ci-dessous).
+  Le formulaire d'ajout s'ouvre sur un bascule **« ✍️ Manuellement » /
+  « 🔍 Recherche en ligne »**. Le panneau de recherche en ligne cherche
+  par titre ou artiste, interroge en même temps 3 sources gratuites
+  (iTunes, MusicBrainz, Deezer — jamais fusionnées entre elles, chaque
+  résultat garde sa source visible), et choisir un résultat revient au
+  formulaire manuel avec le titre, l'artiste, le label et l'année déjà
+  remplis (iTunes et Deezer fournissent aussi une pochette, téléchargée
+  automatiquement ; MusicBrainz n'en fournit pas) — à vérifier et
+  compléter avant de valider, rien n'est écrit tant que le formulaire
+  n'est pas soumis.
 - **Modifier un album** : depuis sa fiche détail, le même formulaire
   s'ouvre pré-rempli avec les valeurs actuelles (sans sélecteur de
   pochette ici — modifier conserve la pochette existante), et écrit
@@ -139,9 +149,8 @@ jamais votre base Music Collector d'origine — deux actions distinctes :
 
 - Changer la sous-collection d'un album en le modifiant (seul l'ajout
   en définit une, celle de l'onglet actif).
-- Recherche en ligne pour pré-remplir une fiche à partir d'un
-  code-barres/UPC ou d'une correspondance Discogs/MusicBrainz — pas
-  commencé.
+- Recherche en ligne par code-barres/UPC — la recherche en ligne
+  (section 3) cherche par titre/artiste, pas encore par code-barres.
 - Pas encore signée/notarisée avec un compte développeur Apple — sans
   conséquence pour un usage personnel, mais nécessaire avant de
   distribuer l'application à qui que ce soit d'autre.

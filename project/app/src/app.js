@@ -107,6 +107,14 @@ const I18N = {
     form_label_notes: "Notes",
     form_label_tracks: "Tracks, one per line",
     form_tracks_placeholder: "One track title per line",
+    add_mode_manual: "✍️ Manually",
+    add_mode_online: "🔍 Online search",
+    search_online_hint: "Search by title or artist — 3 free sources queried at the same time: iTunes, MusicBrainz, Deezer. Results are never merged across sources; pick whichever looks most reliable.",
+    search_online_placeholder: "Title or artist…",
+    search_online_button: "Search",
+    search_online_searching: "Searching…",
+    search_online_no_results: "No results.",
+    search_online_choose: "Use this",
     form_cancel: "Cancel",
     form_save: "Save",
     add_preview_confirm: "Confirm and add",
@@ -216,6 +224,14 @@ const I18N = {
     form_label_notes: "Notes",
     form_label_tracks: "Pistes, une par ligne",
     form_tracks_placeholder: "Un titre de piste par ligne",
+    add_mode_manual: "✍️ Manuellement",
+    add_mode_online: "🔍 Recherche en ligne",
+    search_online_hint: "Cherchez par titre ou artiste — 3 sources gratuites interrogées en même temps : iTunes, MusicBrainz, Deezer. Les résultats ne sont jamais fusionnés entre eux ; choisissez celui qui semble le plus fiable.",
+    search_online_placeholder: "Titre ou artiste…",
+    search_online_button: "Rechercher",
+    search_online_searching: "Recherche…",
+    search_online_no_results: "Aucun résultat.",
+    search_online_choose: "Utiliser celui-ci",
     form_cancel: "Annuler",
     form_save: "Enregistrer",
     add_preview_confirm: "Confirmer l'ajout",
@@ -1139,6 +1155,37 @@ function emptyAlbumFields() {
   };
 }
 
+// "manual" (the static <form>) or "online" (the search panel below) —
+// add-only, always reset to "manual" on open; edit never shows the
+// toggle at all (see openEditForm). Ported from BookNojo's own addMode,
+// adapted to this app's static <dialog> markup instead of a re-rendered
+// template string.
+let addMode = "manual";
+let onlineSearchQuery = "";
+let onlineSearchResults = [];
+let onlineSearchBusy = false;
+let onlineSearchDone = false;
+
+const addModeToggleEl = document.getElementById("add-mode-toggle");
+const onlineSearchPanelEl = document.getElementById("online-search-panel");
+
+function setAddMode(mode) {
+  addMode = mode;
+  form.hidden = mode !== "manual";
+  onlineSearchPanelEl.hidden = mode !== "online";
+  for (const btn of addModeToggleEl.querySelectorAll(".add-mode-btn")) {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  }
+  if (mode === "online") {
+    document.getElementById("onlineSearchInput").focus();
+  }
+}
+
+for (const btn of addModeToggleEl.querySelectorAll(".add-mode-btn")) {
+  btn.addEventListener("click", () => setAddMode(btn.dataset.mode));
+}
+document.getElementById("online-search-cancel").addEventListener("click", () => dialog.close());
+
 function openAddForm() {
   form.reset();
   document.getElementById("album-form-title").textContent = t("form_title_add");
@@ -1147,6 +1194,11 @@ function openAddForm() {
   pendingAddCoverPath = null;
   document.getElementById("add-cover-field").hidden = !window.__TAURI__;
   updateAddCoverChosenLabel();
+  addModeToggleEl.hidden = !window.__TAURI__;
+  onlineSearchResults = [];
+  onlineSearchDone = false;
+  renderOnlineSearchResults();
+  setAddMode("manual");
   dialog.showModal();
 }
 
@@ -1158,6 +1210,9 @@ function openEditForm(a) {
   formError.textContent = "";
   pendingAddCoverPath = null;
   document.getElementById("add-cover-field").hidden = true;
+  addModeToggleEl.hidden = true;
+  onlineSearchPanelEl.hidden = true;
+  form.hidden = false;
   form.elements.title.value = a.title;
   form.elements.artists.value = a.artists.join(", ");
   form.elements.composers.value = a.composers.join(", ");
@@ -1182,6 +1237,117 @@ function openEditForm(a) {
 
 document.getElementById("add-album").addEventListener("click", openAddForm);
 document.getElementById("album-form-cancel").addEventListener("click", () => dialog.close());
+
+// "🔍 Recherche en ligne" — a single search field for all 3 sources
+// (iTunes/MusicBrainz/Deezer), queried together by the Rust side
+// (search_album_online, one thread per source). Results are never merged
+// across sources; each card keeps its own `source` label and is applied
+// individually via applyOnlineResultToForm(). Ported from BookNojo's
+// renderOnlineSearchPanel/applyOnlineResultToForm, adapted to this app's
+// static <dialog> (no renderAddForm()-style re-render here).
+function renderOnlineResultCardHtml(r, i) {
+  const meta = [r.artist, r.label, r.release_year].filter(Boolean).join(" · ");
+  const cover = r.cover_url
+    ? `<img class="online-result-cover" src="${escapeHtml(r.cover_url)}" alt="" loading="lazy">`
+    : '<div class="online-result-cover online-result-cover-empty"></div>';
+  return `
+      <div class="online-result">
+        ${cover}
+        <div class="online-result-info">
+          <span class="online-result-source">${escapeHtml(r.source)}</span>
+          <strong>${escapeHtml(r.title)}</strong>
+          ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+        </div>
+        <button type="button" class="online-result-choose" data-index="${i}">${escapeHtml(t("search_online_choose"))}</button>
+      </div>`;
+}
+
+function renderOnlineSearchResults() {
+  const resultsEl = document.getElementById("onlineSearchResults");
+  let html;
+  if (onlineSearchBusy) {
+    html = "";
+  } else if (onlineSearchDone && onlineSearchResults.length === 0) {
+    html = `<p class="add-hint">${escapeHtml(t("search_online_no_results"))}</p>`;
+  } else {
+    html = onlineSearchResults.map(renderOnlineResultCardHtml).join("");
+  }
+  resultsEl.innerHTML = html;
+  const btn = document.getElementById("onlineSearchBtn");
+  btn.disabled = onlineSearchBusy;
+  btn.textContent = onlineSearchBusy ? t("search_online_searching") : t("search_online_button");
+  resultsEl.querySelectorAll(".online-result-choose").forEach((choiceBtn) => {
+    choiceBtn.addEventListener("click", () => {
+      // Disabled immediately, not re-enabled: applyOnlineResultToForm()
+      // switches back to "manual" mode once it's done, so there's
+      // nothing left to re-enable — this just blocks a second click
+      // during the cover download in between.
+      choiceBtn.disabled = true;
+      applyOnlineResultToForm(onlineSearchResults[parseInt(choiceBtn.dataset.index, 10)]);
+    });
+  });
+}
+
+async function runOnlineSearch() {
+  const query = document.getElementById("onlineSearchInput").value.trim();
+  if (!query || onlineSearchBusy) return;
+  onlineSearchQuery = query;
+  onlineSearchBusy = true;
+  onlineSearchDone = false;
+  renderOnlineSearchResults();
+  try {
+    onlineSearchResults = await invoke("search_album_online", { query });
+  } catch {
+    // The Rust side already turns a single source's failure into "zero
+    // results for that source" — an invoke() rejection here means
+    // something broke before any source even ran.
+    onlineSearchResults = [];
+  }
+  onlineSearchBusy = false;
+  onlineSearchDone = true;
+  renderOnlineSearchResults();
+}
+document.getElementById("onlineSearchBtn").addEventListener("click", runOnlineSearch);
+document.getElementById("onlineSearchInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    runOnlineSearch();
+  }
+});
+
+// Applies one chosen online-search result to the manual form: plain text
+// fields are written directly (this form has no chip/array state to
+// update separately, unlike BookNojo's addFormState — every field here
+// is a plain <input>). Leaves title/artist/label/year as a *starting
+// point*, not a locked value — nothing here writes to the database; the
+// user still reviews and submits the manual form normally afterwards.
+//
+// Cover: if the result has a cover_url (MusicBrainz's never does, see
+// online_search.rs), downloads it via download_online_cover *before*
+// switching back to the manual form, so pendingAddCoverPath is already
+// set by the time that form (and its cover-chosen label) are visible —
+// same ordering as the plain-field prefill above. A download failure
+// never blocks picking this result: the cover is optional everywhere
+// else in this form too, and the user can still pick a local file
+// manually afterwards.
+async function applyOnlineResultToForm(r) {
+  if (!r) return;
+  form.reset();
+  form.elements.title.value = r.title || "";
+  if (r.artist) form.elements.artists.value = r.artist;
+  if (r.label) form.elements.label.value = r.label;
+  if (r.release_year) form.elements.release_year.value = r.release_year;
+  pendingAddCoverPath = null;
+  if (r.cover_url) {
+    try {
+      pendingAddCoverPath = await invoke("download_online_cover", { url: r.cover_url });
+    } catch {
+      pendingAddCoverPath = null;
+    }
+  }
+  updateAddCoverChosenLabel();
+  setAddMode("manual");
+}
 
 const addCoverPickBtn = document.getElementById("addCoverPickBtn");
 if (addCoverPickBtn) {

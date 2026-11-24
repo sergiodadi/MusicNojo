@@ -5,6 +5,8 @@ use anyhow::{bail, Context, Result};
 pub use rusqlite::Connection;
 use serde::Serialize;
 
+pub mod online_search;
+
 // Core Data entity ids for the Collectible-family hierarchy
 // (Collectible -> MusicCollectible -> Album/Disc/Header/SubTrack/Track).
 // These ids are stable across collections created by the same Music

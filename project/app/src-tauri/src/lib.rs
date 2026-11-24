@@ -308,6 +308,44 @@ fn pick_cover_for_new_album(app: tauri::AppHandle) {
         });
 }
 
+/// "Recherche en ligne" — interroge les 3 sources gratuites (iTunes,
+/// MusicBrainz, Deezer) **en parallèle**, un thread par source :
+/// `reqwest::blocking` est volontairement synchrone (voir
+/// `project/src/online_search.rs`), donc le parallélisme vient d'ici, pas
+/// d'async/tokio. Chaque source est indépendante — un échec réseau, un
+/// timeout ou même un panic d'une seule source (`JoinHandle::join`
+/// renvoyant `Err`) n'empêche jamais les 2 autres de répondre. Les
+/// résultats des 3 sources sont concaténés, chacun portant déjà son propre
+/// champ `source` — pas de fusion, le frontend groupe par source à
+/// l'affichage. Porté depuis `search_book_online` de BookNojo.
+#[tauri::command]
+fn search_album_online(query: String) -> Vec<music_collector_export::online_search::AlbumSearchResult> {
+    let itunes = std::thread::spawn({
+        let query = query.clone();
+        move || music_collector_export::online_search::search_itunes_album(&query)
+    });
+    let musicbrainz = std::thread::spawn({
+        let query = query.clone();
+        move || music_collector_export::online_search::search_musicbrainz_album(&query)
+    });
+    let deezer = std::thread::spawn(move || music_collector_export::online_search::search_deezer_album(&query));
+
+    let mut results = Vec::new();
+    for handle in [itunes, musicbrainz, deezer] {
+        if let Ok(Ok(mut source_results)) = handle.join() {
+            results.append(&mut source_results);
+        }
+    }
+    results
+}
+
+/// Thin wrapper around `online_search::download_cover_to_temp_file` —
+/// `reqwest` is already a dependency of the shared crate, not of this one.
+#[tauri::command]
+fn download_online_cover(url: String) -> Result<String, String> {
+    music_collector_export::online_search::download_cover_to_temp_file(&url)
+}
+
 /// Shared by add/edit/delete: refuses the real collection (same rule as
 /// the CLI's ensure_not_real_collection — no override reachable from
 /// the GUI, unlike bc_add's CLI which at least requires an explicit
@@ -697,6 +735,8 @@ pub fn run() {
             pick_collection,
             pick_and_set_cover,
             pick_cover_for_new_album,
+            search_album_online,
+            download_online_cover,
             prepare_add_album,
             add_album,
             edit_album,

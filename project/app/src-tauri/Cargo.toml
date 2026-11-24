@@ -1,6 +1,6 @@
 [package]
 name = "musicnojo"
-version = "0.64.0"
+version = "0.65.0"
 description = "MusicNojo"
 authors = ["Serge"]
 license = "MIT"

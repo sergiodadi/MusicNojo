@@ -690,6 +690,103 @@ dialog::backdrop {
   color: #666;
 }
 
+.add-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.add-mode-btn {
+  flex: 1;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #333;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.add-mode-btn.active {
+  background: #a855f7;
+  border-color: #a855f7;
+  color: #fff;
+}
+
+.online-search-box {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.online-search-box input {
+  flex: 1;
+  padding: 0.4rem;
+}
+
+.online-search-results {
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.online-result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 0.4rem;
+}
+
+.online-result-cover {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.online-result-cover-empty {
+  background: #eee;
+}
+
+.online-result-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.82rem;
+  min-width: 0;
+}
+
+.online-result-source {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #a855f7;
+  text-transform: uppercase;
+}
+
+.online-result-choose {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+}
+
+.online-result-choose:hover {
+  background: #f3edff;
+  border-color: #a855f7;
+  color: #5b21b6;
+}
+
 #album-form .row label {
   flex: 1;
 }
