@@ -5,6 +5,21 @@
 Historique des **versions publiées sur GitHub**, une entrée par
 tag/release — même convention que le [CHANGELOG.md de BookNojo](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0] - 2026-11-26
+
+**Première version stable** — MusicNojo sort de la bêta (les versions
+précédentes allaient de v1.0.0b1 à v1.0.0b9).
+
+- **Recherche en ligne** : pré-remplir les champs et la pochette d'un
+  nouvel album à partir d'iTunes, MusicBrainz ou Deezer, par
+  titre/artiste.
+- **Import Collection** (menu Fichier) amorce désormais une base
+  `.mnj` indépendante à partir d'un `.mucp` Music Collector, séparée du
+  bouton **Open Collection…** du quotidien — le `.mucp` d'origine n'est
+  jamais modifié, et un `.mnj` déjà existant n'est jamais écrasé.
+- Le message « la destination existe déjà » explique maintenant la
+  marche à suivre.
+
 ## [v1.0.0b9] - 2026-11-22
 
 - Nouveau sélecteur de couverture dans le formulaire « Ajouter un

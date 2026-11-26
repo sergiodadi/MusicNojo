@@ -29,6 +29,11 @@ to Book Collector instead of Music Collector).
   and delete albums in a collection — with automatic backups before
   any write, and an outright refusal to write to anything that looks
   like your real collection.
+- Import once from Music Collector (File > Import Collection…) into
+  MusicNojo's own independent database, then reopen it anytime (Open
+  Collection…) — the original file is never modified.
+- Online search (iTunes, MusicBrainz, Deezer) to prefill a new
+  album's fields and cover.
 - Grouping by artist/genre/format/country/label, with an A→Z bar;
   search; sort (dropdown or column click); list/grid view; pagination.
 - Multiple sub-collections in one file — tabs switch between them.
@@ -74,6 +79,11 @@ To compile from source instead of using the `.dmg`, see
 ## Version history
 
 See [`CHANGELOG.md`](CHANGELOG.md).
+
+## To-do
+
+- Display native alert messages in the right language (currently
+  always French, regardless of the interface language toggle).
 
 ## License
 

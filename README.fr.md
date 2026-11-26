@@ -31,6 +31,12 @@ MusicNojo est un projet frère de [BookNojo](https://github.com/sergiodadi/BookN
   ajouter, modifier et supprimer des albums d'une collection — avec
   sauvegarde automatique avant toute écriture, et refus pur et simple
   d'écrire sur ce qui ressemble à la vraie collection.
+- Importer une fois depuis Music Collector (File > Import Collection…)
+  dans la propre base indépendante de MusicNojo, puis la rouvrir à
+  tout moment (Open Collection…) — le fichier d'origine n'est jamais
+  modifié.
+- Recherche en ligne (iTunes, MusicBrainz, Deezer) pour pré-remplir
+  les champs et la pochette d'un nouvel album.
 - Regroupement par artiste/genre/format/pays/label, avec une barre
   A→Z ; recherche ; tri (menu déroulant ou clic sur colonne) ; vue
   liste/grille ; pagination.
@@ -80,6 +86,12 @@ Pour compiler depuis les sources plutôt que d'utiliser le `.dmg`, voir
 ## Historique des versions
 
 Voir [`CHANGELOG.fr.md`](CHANGELOG.fr.md).
+
+## À faire
+
+- Afficher les messages des alertes natives dans la bonne langue
+  (actuellement toujours en français, quelle que soit la langue
+  choisie dans l'interface).
 
 ## Licence
 

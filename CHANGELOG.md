@@ -5,6 +5,20 @@
 History of **versions published on GitHub**, one entry per
 tag/release — same convention as [BookNojo's CHANGELOG.md](https://github.com/sergiodadi/BookNojo/blob/main/CHANGELOG.md).
 
+## [v1.0.0] - 2026-11-26
+
+**First stable release** — MusicNojo exits beta (previous releases were
+v1.0.0b1 through v1.0.0b9).
+
+- **Online search**: prefill a new album's fields and cover from
+  iTunes, MusicBrainz or Deezer, by title/artist.
+- **Import Collection** (File menu) now bootstraps an independent
+  `.mnj` database from a Music Collector `.mucp`, kept separate from
+  the everyday **Open Collection…** button — the original `.mucp` is
+  never modified, and an existing `.mnj` is never overwritten.
+- The "destination already exists" message now explains what to do
+  next.
+
 ## [v1.0.0b9] - 2026-11-22
 
 - New cover picker in the "Add Album…" form (optional) — no longer
